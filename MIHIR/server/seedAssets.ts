@@ -9,8 +9,8 @@ import {
   TimeEntry,
   WorkNote,
   WorkspaceSettings,
-} from '../src/types/workspace';
-import { createDefaultGitStages } from '../src/lib/workspaceLogic';
+} from '../src/types/workspace.js';
+import { createDefaultGitStages } from '../src/lib/workspaceLogic.js';
 
 export const DEFAULT_DEMO_SUBTASKS: Record<string, TaskChecklistItem[]> = {
   'MIHIR-001': [

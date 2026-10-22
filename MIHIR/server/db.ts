@@ -12,13 +12,13 @@ import {
   WorkNote,
   WorkspaceSettings,
   WorkspaceStatePayload,
-} from '../src/types/workspace';
+} from '../src/types/workspace.js';
 import {
   createInitialSeedData,
   DEFAULT_DEMO_SUBTASKS,
   DEFAULT_RAY_REPOSITORIES,
   ensureSampleUploadFiles,
-} from './seedAssets';
+} from './seedAssets.js';
 
 /** Vercel serverless has a read-only filesystem (except /tmp). Use in-memory SQLite there. */
 export const IS_VERCEL = Boolean(process.env.VERCEL);

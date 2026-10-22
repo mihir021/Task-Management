@@ -1,5 +1,5 @@
 import express from 'express';
-import { apiRouter } from '../MIHIR/server/apiRouter';
+import { apiRouter } from '../MIHIR/server/apiRouter.js';
 
 const app = express();
 

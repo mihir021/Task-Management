@@ -7,7 +7,7 @@ import {
   TaskStatus,
   TimeEntry,
   WorkflowMode,
-} from '../types/workspace';
+} from '../types/workspace.js';
 
 export const DEFAULT_GIT_STAGE_BLUEPRINTS: Array<{
   stageKey: string;

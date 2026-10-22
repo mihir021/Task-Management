@@ -9,6 +9,7 @@
   "scripts": {
     "workspace": "node scripts/workspace.mjs",
     "test:workspace-client": "node --test scripts/workspace.test.mjs",
+    "test:serverless": "node --test scripts/serverless.test.mjs",
     "test:monitor": "tsx --test MIHIR/server/monitor.test.ts",
     "test:scripts": "tsx --test MIHIR/server/scripts.test.ts",
     "test:log-table": "tsx --test MIHIR/src/lib/scriptLogParser.test.ts",

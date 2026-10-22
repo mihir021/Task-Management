@@ -1,6 +1,6 @@
 import { GoogleGenAI, GenerateContentResponse } from '@google/genai';
-import { TaskRecord, TimeEntry, WorkNote } from '../src/types/workspace';
-import { summarizeRepositoryProgress } from '../src/lib/workspaceLogic';
+import { TaskRecord, TimeEntry, WorkNote } from '../src/types/workspace.js';
+import { summarizeRepositoryProgress } from '../src/lib/workspaceLogic.js';
 
 export type GeminiModelChoice =
   | 'gemini-4-argon'

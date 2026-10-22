@@ -34,15 +34,15 @@ import {
   getAllDailyFocusItems,
   upsertDailyFocusItem,
   deleteDailyFocusItemById,
-} from './db';
+} from './db.js';
 import {
   BOT_ROLE_CONFIGS,
   EngineeringBotRole,
   GeminiModelChoice,
   runMultiTurnGeminiChat,
-} from './geminiChat';
-import { createDefaultGitStages } from '../src/lib/workspaceLogic';
-import { DuplicatePolicy, TaskAttachment, TaskRecord, TaskRepository, TaskStatus } from '../src/types/workspace';
+} from './geminiChat.js';
+import { createDefaultGitStages } from '../src/lib/workspaceLogic.js';
+import { DuplicatePolicy, TaskAttachment, TaskRecord, TaskRepository, TaskStatus } from '../src/types/workspace.js';
 
 export const apiRouter = express.Router();
 
