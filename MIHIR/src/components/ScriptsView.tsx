@@ -1,3 +1,4 @@
+import { scriptRequest, LOCAL_RUNNER_URL, RUNNER_TOKEN_KEY, isLocalWorkspace } from '../lib/scriptTransport';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Terminal, Play, Save, Plus, RefreshCw, ShieldCheck, FileCode2, PanelsTopLeft, Settings2 } from 'lucide-react';
 import type { ScriptDefinition, ScriptRun } from '../types/scripts';
@@ -26,25 +27,26 @@ export function ScriptsView() {
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const initialized = useRef(false);
-  const token = useRef('');
+  const hosted = !isLocalWorkspace(window.location.hostname);
+  const apiBase = hosted ? LOCAL_RUNNER_URL : '';
+  const token = useRef(hosted ? sessionStorage.getItem(RUNNER_TOKEN_KEY) || '' : '');
+  const [pairing, setPairing] = useState('');
+  const [connecting, setConnecting] = useState(false);
+
   const workspaceNode = useRef<HTMLElement>(null);
   const editorNode = useRef<HTMLDetailsElement>(null);
 
   async function api<T>(route: string, method = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
-    const response = await fetch('/api/scripts' + route, {
-      method, signal, headers: { 'Content-Type': 'application/json', ...(method !== 'GET' ? { 'X-Mihir-Scripts-Token': token.current } : {}) },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    const value = await response.json();
-    if (!response.ok) throw new Error(value.error || 'Scripts request failed.');
-    return value;
+    return scriptRequest<T>(apiBase, token.current, route, method, body, signal);
   }
 
   async function load(silent = false) {
+    if (hosted && !token.current) return false;
     try {
       const value = await api<Bootstrap>('');
       token.current = value.token; setData(value); if (!silent) setError('');
-      setDraft(previous => previous || value.scripts[0] || null);
+      if (hosted) sessionStorage.setItem(RUNNER_TOKEN_KEY, value.token);
+      setDraft(previous => previous || value.scripts.find(item => item.mode === 'kubernetes') || value.scripts[0] || null);
       if (!initialized.current) {
         let saved: unknown;
         try { saved = JSON.parse(localStorage.getItem('mihir_script_windows') || 'null'); } catch { saved = null; }
@@ -52,9 +54,21 @@ export function ScriptsView() {
         setEditorOpen(value.runs.length === 0);
         initialized.current = true;
       }
-    } catch (problem: any) { if (!silent) setError(problem.message); }
+      return true;
+    } catch (problem: any) { if (!silent) setError(problem.message); return false; }
   }
   useEffect(() => { load(); }, []);
+  async function connectRunner(event: React.FormEvent) {
+    event.preventDefault();
+    if (!/^[a-f0-9]{64}$/.test(pairing.trim())) { setError('Paste the full pairing token printed in your local runner terminal.'); return; }
+    setConnecting(true); token.current = pairing.trim();
+    try { if (await load()) setPairing(''); } finally { setConnecting(false); }
+  }
+  function disconnectRunner() {
+    token.current = ''; sessionStorage.removeItem(RUNNER_TOKEN_KEY);
+    setData(null); setDraft(null); setOpenIds([]); setFocusedId(null); initialized.current = false; setError('');
+  }
+
 
   useEffect(() => {
     if (!draft || !data) return;
@@ -148,19 +162,24 @@ export function ScriptsView() {
   return <div className="space-y-5">
     <div className="flex flex-wrap justify-between items-start gap-3"><div><h1 className="text-2xl font-bold flex items-center gap-2"><Terminal className="text-indigo-500" />Scripts</h1><p className="mt-1 text-sm text-slate-500">Run your Ray workflow locally, with live terminal output and step-by-step status.</p></div>
       <button onClick={() => load()} className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm flex gap-2 items-center"><RefreshCw className="w-4 h-4" />Refresh</button></div>
+    {hosted && <section aria-label="Local terminal connection" className={`${panel} p-5 space-y-3`}>
+      <div className="flex justify-between gap-3"><div><h2 className="font-semibold">{data ? 'Connected to your local terminal' : 'Connect local terminal'}</h2><p className="text-xs text-slate-500 mt-1">Commands execute on this computer. Terminal view shows the raw process output; Log table provides a structured view.</p></div>{data && <button onClick={disconnectRunner} className="text-xs text-slate-500 underline">Disconnect</button>}</div>
+      {!data && <><p className="text-sm">Start the runner in your system terminal and keep it open:</p><pre className="rounded-lg bg-slate-950 text-slate-100 p-3 text-xs overflow-x-auto">{'cd /home/mihir-rathod/antigravity/MIHIR-Workspace\n./scripts/start-terminal-runner.sh'}</pre>
+      <form onSubmit={connectRunner} className="flex flex-wrap gap-2"><label className="grow text-xs">Pairing token<input type="password" autoComplete="off" spellCheck={false} aria-label="Local runner pairing token" className={`${inputClass} mt-1 font-mono`} value={pairing} onChange={event => setPairing(event.target.value)} placeholder="Paste the token printed by the runner" /></label><button disabled={connecting} className="self-end rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm disabled:opacity-50">{connecting ? 'Connecting…' : 'Connect local terminal'}</button></form><p className="text-xs text-slate-500">The connection stays on your computer at 127.0.0.1:43123. If asked, allow this website to access your local network. The token is remembered only in this browser tab. Restarting the runner requires pairing again.</p></>}
+    </section>}
     {error && <p role="alert" className="rounded-xl bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300 p-4 text-sm">{error}</p>}
     <section ref={workspaceNode} aria-label="Output workspace" className="space-y-4 scroll-mt-20">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div><h2 className="font-semibold flex items-center gap-2"><PanelsTopLeft className="w-4 h-4 text-indigo-500" />Output workspace <span className="text-xs font-normal text-slate-500">{runningCount}/3 running · {windows.length} windows open</span></h2><p className="text-xs text-slate-500 mt-1">Independent outputs for each service. Expand a window for the full table.</p></div>
-        <div className="flex flex-wrap gap-2"><select aria-label="Open recent run in a window" value="" className="max-w-64 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 p-2 text-xs" onChange={event => { if (event.target.value) openWindow(event.target.value); }}><option value="">Open recent run…</option>{data?.runs.filter(item => !openIds.includes(item.id)).map(item => <option key={item.id} value={item.id}>{item.name} · {item.status}</option>)}</select><button onClick={prepareMonitor} className="rounded-lg bg-indigo-600 text-white px-3 py-2 text-xs flex items-center gap-1"><Plus className="w-4 h-4" />New monitor</button><button onClick={() => setEditorOpen(value => !value)} className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-xs flex items-center gap-1"><Settings2 className="w-4 h-4" />Script settings</button></div>
+        <div className="flex flex-wrap gap-2"><select aria-label="Open recent run in a window" value="" className="max-w-64 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 p-2 text-xs" onChange={event => { if (event.target.value) openWindow(event.target.value); }}><option value="">Open recent run…</option>{data?.runs.filter(item => !openIds.includes(item.id)).map(item => <option key={item.id} value={item.id}>{item.name} · {item.status}</option>)}</select><button disabled={!data} onClick={prepareMonitor} className="rounded-lg bg-indigo-600 text-white px-3 py-2 text-xs flex items-center gap-1"><Plus className="w-4 h-4" />New monitor</button><button disabled={!data} onClick={() => setEditorOpen(value => !value)} className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-xs flex items-center gap-1"><Settings2 className="w-4 h-4" />Script settings</button></div>
       </div>
       {focusedId && <div className="fixed inset-0 bg-slate-950/60 z-30" onClick={() => setFocusedId(null)} />}
       <div className={`grid gap-4 items-start ${windows.length > 1 ? 'lg:grid-cols-2' : 'grid-cols-1'} ${windows.length === 3 ? '2xl:grid-cols-3' : ''}`}>
         {windows.map((item, index) => <div key={item.id} className={focusedId === item.id ? 'fixed inset-4 z-40 overflow-auto rounded-2xl shadow-2xl' : focusedId ? 'hidden' : 'min-w-0'}>
-          <RunOutputWindow initialRun={item} token={token} compact={windows.length > 1 && !focusedId} expanded={focusedId === item.id} index={index + 1} onUpdate={updateRun}
+          <RunOutputWindow apiBase={apiBase} initialRun={item} token={token} compact={windows.length > 1 && !focusedId} expanded={focusedId === item.id} index={index + 1} onUpdate={updateRun}
             onExpand={() => setFocusedId(previous => previous === item.id ? null : item.id)} onClose={() => { setOpenIds(previous => previous.filter(id => id !== item.id)); if (focusedId === item.id) setFocusedId(null); }} />
         </div>)}
-        {!focusedId && windows.length < 3 && <button onClick={prepareMonitor} className="rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 text-slate-500 min-h-44 flex flex-col items-center justify-center gap-2 hover:border-indigo-400 hover:text-indigo-600 p-6"><Plus className="w-6 h-6" /><span className="text-sm font-medium">{windows.length ? `Add service window ${windows.length + 1}` : 'Start your first service monitor'}</span><span className="text-xs">Kubernetes logs or custom application output</span></button>}
+        {!focusedId && windows.length < 3 && <button disabled={!data} onClick={prepareMonitor} className="rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 text-slate-500 min-h-44 flex flex-col items-center justify-center gap-2 hover:border-indigo-400 hover:text-indigo-600 p-6"><Plus className="w-6 h-6" /><span className="text-sm font-medium">{windows.length ? `Add service window ${windows.length + 1}` : 'Start your first service monitor'}</span><span className="text-xs">Kubernetes logs or custom application output</span></button>}
       </div>
     </section>
     <details ref={editorNode} open={editorOpen} onToggle={event => setEditorOpen(event.currentTarget.open)} className="scroll-mt-20">

@@ -39,6 +39,9 @@ test('compiled serverless API runs in plain Node without a TypeScript loader', a
         const state = await response.json();
         assert.ok(Array.isArray(state.tasks));
         assert.ok(Array.isArray(state.repositories));
+        const scripts = await fetch('http://127.0.0.1:' + server.address().port + '/api/scripts');
+        assert.equal(scripts.status, 503);
+        assert.equal((await scripts.json()).code, 'LOCAL_RUNNER_REQUIRED');
       } finally {
         await new Promise(resolve => server.close(resolve));
       }

@@ -8,9 +8,9 @@ import { ScriptRunner } from './scriptRunner';
 import { RAY_CONTAINERS, type ScriptDefinition } from '../src/types/scripts';
 import { kubernetesServicePresets } from './kubernetesScript';
 
-export function createScriptsRouter({ dataDir, home = os.homedir() }: { dataDir: string; home?: string }) {
+export function createScriptsRouter({ dataDir, home = os.homedir(), companion }: { dataDir: string; home?: string; companion?: { token: string; origin: string } }) {
   const router = express.Router();
-  const token = randomBytes(32).toString('hex');
+  const token = companion?.token || randomBytes(32).toString('hex');
   const scriptDir = path.join(dataDir, 'scripts');
   fs.mkdirSync(scriptDir, { recursive: true, mode: 0o700 });
   const definitions = path.join(scriptDir, 'definitions.json');
@@ -33,16 +33,29 @@ export function createScriptsRouter({ dataDir, home = os.homedir() }: { dataDir:
     let host = '';
     try { host = new URL('http://' + req.get('host')).hostname; } catch { /* reject below */ }
     const origin = req.get('origin');
-    if (!local || !['localhost', '127.0.0.1', '[::1]'].includes(host)
-      || req.get('sec-fetch-site') === 'cross-site'
-      || (origin && origin !== `${req.protocol}://${req.get('host')}`)) {
+    if (!local || !['localhost', '127.0.0.1', '[::1]'].includes(host)) {
+      res.status(403).json({ error: 'Scripts require a loopback connection on this computer.' }); return;
+    }
+    if (companion) {
+      // No wildcard origins, cookies, or token-bearing URLs. Every read and write is paired.
+      if (origin && origin !== companion.origin) {
+        res.status(403).json({ error: 'This website is not paired with the local runner.' }); return;
+      }
+      if (origin) {
+        res.set('Access-Control-Allow-Origin', companion.origin).set('Vary', 'Origin');
+        res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
+        res.set('Access-Control-Allow-Headers', 'Content-Type, X-Mihir-Scripts-Token');
+        res.set('Access-Control-Allow-Private-Network', 'true');
+      }
+      if (req.method === 'OPTIONS') { res.sendStatus(204); return; }
+    } else if (req.get('sec-fetch-site') === 'cross-site' || (origin && origin !== `${req.protocol}://${req.get('host')}`)) {
       res.status(403).json({ error: 'Scripts can only be used from this computer at localhost.' }); return;
     }
-    if (req.method !== 'GET') {
+    if (companion || req.method !== 'GET') {
       const supplied = Buffer.from(req.get('x-mihir-scripts-token') || '');
       const expected = Buffer.from(token);
       if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
-        res.status(403).json({ error: 'Script session expired. Refresh Scripts before running commands.' }); return;
+        res.status(403).json({ error: 'Pair this browser with the token from your local runner terminal.' }); return;
       }
     }
     res.set('Cache-Control', 'no-store'); next();

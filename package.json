@@ -21,7 +21,9 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx --test MIHIR/src/lib/workspaceLogic.test.ts"
+    "test": "tsx --test MIHIR/src/lib/workspaceLogic.test.ts",
+    "terminal:runner": "tsx MIHIR/server/localRunner.ts",
+    "test:terminal-runner": "tsx --test MIHIR/server/localRunner.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

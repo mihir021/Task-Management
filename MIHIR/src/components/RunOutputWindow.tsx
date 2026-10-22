@@ -1,3 +1,4 @@
+import { scriptRequest, followScriptEvents, downloadScriptOutput } from '../lib/scriptTransport';
 import React, { useEffect, useRef, useState } from 'react';
 import { Terminal as XTerminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -13,6 +14,7 @@ export function RunBadge({ status }: { status: string }) {
 
 interface Props {
   initialRun: ScriptRun;
+  apiBase: string;
   token: React.MutableRefObject<string>;
   compact: boolean;
   expanded: boolean;
@@ -22,12 +24,12 @@ interface Props {
   onClose: () => void;
 }
 
-export function RunOutputWindow({ initialRun, token, compact, expanded, index, onUpdate, onExpand, onClose }: Props) {
+export function RunOutputWindow({ initialRun, apiBase, token, compact, expanded, index, onUpdate, onExpand, onClose }: Props) {
   const [run, setRun] = useState(initialRun);
   const [connected, setConnected] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [follow, setFollow] = useState(true);
-  const [view, setView] = useState<'table' | 'terminal'>(() => initialRun.mode === 'kubernetes' || initialRun.steps.some(step => step.id === 'pod-logs') ? 'table' : 'terminal');
+  const [view, setView] = useState<'table' | 'terminal'>('terminal');
   const [rows, setRows] = useState<ScriptLogRow[]>([]);
   const [error, setError] = useState('');
   const node = useRef<HTMLDivElement>(null);
@@ -38,12 +40,7 @@ export function RunOutputWindow({ initialRun, token, compact, expanded, index, o
   const inputChain = useRef<Promise<unknown>>(Promise.resolve());
 
   async function action(route: string, body?: unknown) {
-    const response = await fetch(`/api/scripts/runs/${initialRun.id}/${route}`, { method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Mihir-Scripts-Token': token.current }, body: JSON.stringify(body || {}),
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Session request failed.');
-    return result;
+    return scriptRequest<any>(apiBase, token.current, `/runs/${initialRun.id}/${route}`, 'POST', body || {});
   }
 
   useEffect(() => {
@@ -69,26 +66,24 @@ export function RunOutputWindow({ initialRun, token, compact, expanded, index, o
     let timer: ReturnType<typeof setTimeout> | null = null;
     const flush = () => { setRows(parser.records()); timer = null; };
     const schedule = () => { if (!timer) timer = setTimeout(flush, 200); };
-    const stream = new EventSource(`/api/scripts/runs/${initialRun.id}/events`);
-    stream.onopen = () => { setConnected(true); setError(''); };
     const update = (value: ScriptRun) => {
       setRun(value); updateRef.current(value);
-      if (value.status !== 'Running') { parser.finish(); if (timer) clearTimeout(timer); flush(); stream.close(); setConnected(false); }
+      if (value.status !== 'Running') { parser.finish(); if (timer) clearTimeout(timer); flush(); return false; }
     };
-    stream.addEventListener('snapshot', event => {
-      const value = JSON.parse((event as MessageEvent).data);
-      parser.reset(); parser.ingest(value.output || ''); schedule();
-      terminal.current?.reset(); terminal.current?.write(value.output || 'No output recorded yet.\r\n'); update(value.run);
-    });
-    stream.addEventListener('output', event => {
-      const output = JSON.parse((event as MessageEvent).data);
-      parser.ingest(output); schedule();
-      terminal.current?.write(output, () => { if (followRef.current) terminal.current?.scrollToBottom(); });
-    });
-    stream.addEventListener('status', event => update(JSON.parse((event as MessageEvent).data)));
-    stream.onerror = () => setConnected(false);
-    return () => { stream.close(); if (timer) clearTimeout(timer); };
-  }, [initialRun.id]);
+    const stop = followScriptEvents(apiBase, () => token.current, initialRun.id, (name, value) => {
+      if (name === 'snapshot') {
+        parser.reset(); parser.ingest(value.output || ''); schedule();
+        terminal.current?.reset(); terminal.current?.write(value.output || 'No output recorded yet.\r\n');
+        return update(value.run);
+      }
+      if (name === 'output') {
+        parser.ingest(value); schedule();
+        terminal.current?.write(value, () => { if (followRef.current) terminal.current?.scrollToBottom(); });
+      }
+      if (name === 'status') return update(value);
+    }, value => { setConnected(value); if (value) setError(''); }, setError);
+    return () => { stop(); if (timer) clearTimeout(timer); };
+  }, [initialRun.id, apiBase]);
 
   useEffect(() => {
     const tick = () => setElapsed(Math.max(0, Math.floor(((run.finishedAt ? new Date(run.finishedAt).getTime() : Date.now()) - new Date(run.startedAt).getTime()) / 1000)));
@@ -105,7 +100,7 @@ export function RunOutputWindow({ initialRun, token, compact, expanded, index, o
       <div className="min-w-0"><div className="flex items-center gap-2"><span className="h-6 w-6 shrink-0 rounded-md bg-indigo-100 dark:bg-indigo-950 flex items-center justify-center text-indigo-600 text-xs font-semibold">{index}</span><h3 className="font-semibold text-sm truncate" title={run.name}>{target}</h3><RunBadge status={run.status} /></div><p className="text-[10px] text-slate-500 mt-1.5">{run.namespace ? `${run.namespace} · ` : ''}{elapsed}s{run.exitCode !== null ? ` · exit ${run.exitCode}` : ''}{run.status === 'Running' ? connected ? ' · live' : ' · reconnecting…' : ''}</p></div>
       <div className="flex items-center gap-1 shrink-0"><button onClick={onExpand} aria-label={expanded ? `Restore window ${index}` : `Expand window ${index}`} title={expanded ? 'Restore windows' : 'Expand this window'} className="p-1.5 text-slate-500 rounded hover:bg-slate-200 dark:hover:bg-slate-800">{expanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}</button><button onClick={onClose} aria-label={`Close window ${index} view`} title="Close this view; the process continues running" className="p-1.5 text-slate-500 rounded hover:bg-slate-200 dark:hover:bg-slate-800"><X className="w-4 h-4" /></button></div>
     </header>
-    <div className="px-4 pt-3 flex flex-wrap gap-3 justify-between border-b border-slate-200 dark:border-slate-800"><div className="flex gap-4" role="tablist" aria-label={`Output format for window ${index}`}><button role="tab" aria-selected={view === 'table'} className={`pb-3 text-xs ${view === 'table' ? 'font-semibold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`} onClick={() => setView('table')}>Log table</button><button role="tab" aria-selected={view === 'terminal'} className={`pb-3 text-xs flex items-center gap-1 ${view === 'terminal' ? 'font-semibold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`} onClick={() => setView('terminal')}><Terminal className="w-3 h-3" />Terminal</button></div><div className="flex gap-3 items-start text-[10px]"><label className="flex items-center gap-1"><input type="checkbox" checked={follow} onChange={event => setFollow(event.target.checked)} />Follow</label><a className="text-indigo-600" href={`/api/scripts/runs/${run.id}/output`} download title="Download this session output"><Download className="w-3.5 h-3.5" /></a><button disabled={run.status !== 'Running'} className="text-rose-500 flex gap-1 items-center disabled:opacity-30" onClick={interrupt}><Square className="w-3 h-3" />Stop</button></div></div>
+    <div className="px-4 pt-3 flex flex-wrap gap-3 justify-between border-b border-slate-200 dark:border-slate-800"><div className="flex gap-4" role="tablist" aria-label={`Output format for window ${index}`}><button role="tab" aria-selected={view === 'table'} className={`pb-3 text-xs ${view === 'table' ? 'font-semibold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`} onClick={() => setView('table')}>Log table</button><button role="tab" aria-selected={view === 'terminal'} className={`pb-3 text-xs flex items-center gap-1 ${view === 'terminal' ? 'font-semibold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`} onClick={() => setView('terminal')}><Terminal className="w-3 h-3" />Terminal</button></div><div className="flex gap-3 items-start text-[10px]"><label className="flex items-center gap-1"><input type="checkbox" checked={follow} onChange={event => setFollow(event.target.checked)} />Follow</label><button className="text-indigo-600" aria-label="Download terminal output" title="Download this session output" onClick={() => downloadScriptOutput(apiBase, token.current, run.id).catch(problem => setError(problem.message))}><Download className="w-3.5 h-3.5" /></button><button disabled={run.status !== 'Running'} className="text-rose-500 flex gap-1 items-center disabled:opacity-30" onClick={interrupt}><Square className="w-3 h-3" />Stop</button></div></div>
     {error && <p role="alert" className="px-4 py-2 text-xs text-rose-600">{error}</p>}
     {run.message && <p className="px-4 py-2 text-xs text-amber-700 bg-amber-50 dark:bg-amber-950">{run.message}</p>}
     {run.stopRequested && run.status === 'Running' && <p className="px-4 py-2 text-xs text-amber-700">Interrupt sent; waiting for this process to exit.</p>}

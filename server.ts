@@ -24,6 +24,8 @@ if (!IS_VERCEL) {
   app.use('/api/scripts', createScriptsRouter({ dataDir: DATA_DIR }));
 }
 
+app.use('/api/scripts', (_req, res) => res.status(503).json({ error: 'Connect the local terminal runner.', code: 'LOCAL_RUNNER_REQUIRED' }));
+
 // Mount REST API
 app.use('/api', apiRouter);
 
