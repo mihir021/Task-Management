@@ -1,0 +1,8 @@
+{
+  "firestore": {
+    "databaseId": "ai-studio-mihirworkspace-9782de47-d45e-447b-963b-7b19491e18a1",
+    "rules": "firestore.rules",
+    "edition": "ENTERPRISE",
+    "dataAccessMode": "FIRESTORE_NATIVE"
+  }
+}

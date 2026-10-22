@@ -1,0 +1,504 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net: Default-Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Hardened Global Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    // 3. Entity Validation Blueprints (Anti-Update-Gap)
+    function isValidWorkspaceTask(data) {
+      return data.keys().hasAll([
+        'ownerId',
+        'taskCode',
+        'title',
+        'description',
+        'projectName',
+        'repositoryName',
+        'workingBranch',
+        'baseBranch',
+        'status',
+        'priority',
+        'rootCauseSummary',
+        'gitCompletedSteps',
+        'gitTotalSteps',
+        'isArchived',
+        'tags',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'ownerId',
+        'taskCode',
+        'title',
+        'description',
+        'projectName',
+        'repositoryName',
+        'workingBranch',
+        'baseBranch',
+        'status',
+        'priority',
+        'rootCauseSummary',
+        'gitCompletedSteps',
+        'gitTotalSteps',
+        'isArchived',
+        'tags',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.ownerId is string &&
+      data.ownerId.size() >= 1 &&
+      data.ownerId.size() <= 128 &&
+      data.ownerId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.ownerId == request.auth.uid &&
+      data.taskCode is string &&
+      data.taskCode.size() >= 1 &&
+      data.taskCode.size() <= 40 &&
+      data.taskCode.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.title is string &&
+      data.title.size() >= 1 &&
+      data.title.size() <= 300 &&
+      data.description is string &&
+      data.description.size() <= 5000 &&
+      data.projectName is string &&
+      data.projectName.size() >= 1 &&
+      data.projectName.size() <= 120 &&
+      data.repositoryName is string &&
+      data.repositoryName.size() >= 1 &&
+      data.repositoryName.size() <= 120 &&
+      data.workingBranch is string &&
+      data.workingBranch.size() >= 1 &&
+      data.workingBranch.size() <= 200 &&
+      data.baseBranch is string &&
+      data.baseBranch.size() >= 1 &&
+      data.baseBranch.size() <= 200 &&
+      data.status is string &&
+      data.status.size() >= 1 &&
+      data.status.size() <= 40 &&
+      data.status in [
+        'Backlog',
+        'Assigned',
+        'In Progress',
+        'Blocked',
+        'Ready for Testing',
+        'In Review',
+        'Done',
+        'Locked'
+      ] &&
+      data.priority is string &&
+      data.priority.size() >= 1 &&
+      data.priority.size() <= 20 &&
+      data.priority in ['Low', 'Medium', 'High', 'Urgent'] &&
+      data.rootCauseSummary is string &&
+      data.rootCauseSummary.size() <= 5000 &&
+      data.gitCompletedSteps is int &&
+      data.gitCompletedSteps >= 0 &&
+      data.gitCompletedSteps <= 20 &&
+      data.gitTotalSteps is int &&
+      data.gitTotalSteps >= 1 &&
+      data.gitTotalSteps <= 20 &&
+      data.isArchived is bool &&
+      data.tags is list &&
+      data.tags.size() <= 10 &&
+      (data.tags.size() == 0 || (data.tags[0] is string && data.tags[0].size() >= 1 && data.tags[0].size() <= 50)) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidWorkspaceNote(data) {
+      return data.keys().hasAll([
+        'ownerId',
+        'title',
+        'content',
+        'relatedTaskCode',
+        'status',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'ownerId',
+        'title',
+        'content',
+        'relatedTaskCode',
+        'status',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.ownerId is string &&
+      data.ownerId.size() >= 1 &&
+      data.ownerId.size() <= 128 &&
+      data.ownerId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.ownerId == request.auth.uid &&
+      data.title is string &&
+      data.title.size() >= 1 &&
+      data.title.size() <= 200 &&
+      data.content is string &&
+      data.content.size() >= 1 &&
+      data.content.size() <= 5000 &&
+      data.relatedTaskCode is string &&
+      data.relatedTaskCode.size() >= 1 &&
+      data.relatedTaskCode.size() <= 40 &&
+      data.status is string &&
+      data.status.size() >= 1 &&
+      data.status.size() <= 20 &&
+      data.status in ['Active', 'Completed', 'Locked'] &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidWorkspaceTimeEntry(data) {
+      return data.keys().hasAll([
+        'ownerId',
+        'taskCode',
+        'durationMinutes',
+        'notes',
+        'status',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'ownerId',
+        'taskCode',
+        'durationMinutes',
+        'notes',
+        'status',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.ownerId is string &&
+      data.ownerId.size() >= 1 &&
+      data.ownerId.size() <= 128 &&
+      data.ownerId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.ownerId == request.auth.uid &&
+      data.taskCode is string &&
+      data.taskCode.size() >= 1 &&
+      data.taskCode.size() <= 40 &&
+      data.durationMinutes is int &&
+      data.durationMinutes >= 1 &&
+      data.durationMinutes <= 1440 &&
+      data.notes is string &&
+      data.notes.size() >= 1 &&
+      data.notes.size() <= 1000 &&
+      data.status is string &&
+      data.status.size() >= 1 &&
+      data.status.size() <= 20 &&
+      data.status in ['Logged', 'Locked'] &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidChatThread(data) {
+      return data.keys().hasAll([
+        'ownerId',
+        'title',
+        'roleId',
+        'modelId',
+        'linkedTaskCode',
+        'status',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'ownerId',
+        'title',
+        'roleId',
+        'modelId',
+        'linkedTaskCode',
+        'status',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.ownerId is string &&
+      data.ownerId.size() >= 1 &&
+      data.ownerId.size() <= 128 &&
+      data.ownerId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.ownerId == request.auth.uid &&
+      data.title is string &&
+      data.title.size() >= 1 &&
+      data.title.size() <= 200 &&
+      data.roleId is string &&
+      data.roleId.size() >= 1 &&
+      data.roleId.size() <= 60 &&
+      data.modelId is string &&
+      data.modelId.size() >= 1 &&
+      data.modelId.size() <= 60 &&
+      data.modelId in ['gemini-4-argon', 'gemini-3.8-flash', 'gemini-3.1-flash-lite'] &&
+      data.linkedTaskCode is string &&
+      data.linkedTaskCode.size() >= 1 &&
+      data.linkedTaskCode.size() <= 40 &&
+      data.status is string &&
+      data.status.size() >= 1 &&
+      data.status.size() <= 20 &&
+      data.status in ['Active', 'Locked'] &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidChatMessage(data) {
+      return data.keys().hasAll([
+        'ownerId',
+        'threadId',
+        'sender',
+        'text',
+        'modelUsed',
+        'status',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'ownerId',
+        'threadId',
+        'sender',
+        'text',
+        'modelUsed',
+        'status',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.ownerId is string &&
+      data.ownerId.size() >= 1 &&
+      data.ownerId.size() <= 128 &&
+      data.ownerId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.ownerId == request.auth.uid &&
+      data.threadId is string &&
+      data.threadId.size() >= 1 &&
+      data.threadId.size() <= 128 &&
+      data.threadId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.sender is string &&
+      data.sender.size() >= 1 &&
+      data.sender.size() <= 20 &&
+      data.sender in ['user', 'model'] &&
+      data.text is string &&
+      data.text.size() >= 1 &&
+      data.text.size() <= 15000 &&
+      data.modelUsed is string &&
+      data.modelUsed.size() >= 1 &&
+      data.modelUsed.size() <= 60 &&
+      data.status is string &&
+      data.status.size() >= 1 &&
+      data.status.size() <= 20 &&
+      data.status in ['Final', 'Locked'] &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // 4. Collection Rules: /tasks/{taskId}
+    match /tasks/{taskId} {
+      allow get: if isVerifiedUser() && isValidId(taskId) && existing().ownerId == request.auth.uid;
+      allow list: if isVerifiedUser() && resource.data.ownerId == request.auth.uid;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(taskId) &&
+        isValidWorkspaceTask(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if (
+        isVerifiedUser() &&
+        isValidId(taskId) &&
+        isValidWorkspaceTask(incoming()) &&
+        existing().ownerId == request.auth.uid &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        existing().status != 'Locked' && (
+          // Action 1: Update Task Status or Archive Flag
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'isArchived', 'updatedAt']) ||
+          // Action 2: Full Task Details Sync
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'taskCode',
+            'title',
+            'description',
+            'projectName',
+            'repositoryName',
+            'workingBranch',
+            'baseBranch',
+            'status',
+            'priority',
+            'rootCauseSummary',
+            'gitCompletedSteps',
+            'gitTotalSteps',
+            'isArchived',
+            'tags',
+            'updatedAt'
+          ])
+        )
+      );
+
+      allow delete: if isVerifiedUser() && isValidId(taskId) && existing().ownerId == request.auth.uid;
+    }
+
+    // 5. Collection Rules: /workNotes/{noteId}
+    match /workNotes/{noteId} {
+      allow get: if isVerifiedUser() && isValidId(noteId) && existing().ownerId == request.auth.uid;
+      allow list: if isVerifiedUser() && resource.data.ownerId == request.auth.uid;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(noteId) &&
+        isValidWorkspaceNote(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if (
+        isVerifiedUser() &&
+        isValidId(noteId) &&
+        isValidWorkspaceNote(incoming()) &&
+        existing().ownerId == request.auth.uid &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        existing().status != 'Locked' && (
+          // Action 1: Toggle Note Status
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) ||
+          // Action 2: Edit Note Content
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'title',
+            'content',
+            'relatedTaskCode',
+            'status',
+            'updatedAt'
+          ])
+        )
+      );
+
+      allow delete: if isVerifiedUser() && isValidId(noteId) && existing().ownerId == request.auth.uid;
+    }
+
+    // 6. Collection Rules: /timeEntries/{entryId}
+    match /timeEntries/{entryId} {
+      allow get: if isVerifiedUser() && isValidId(entryId) && existing().ownerId == request.auth.uid;
+      allow list: if isVerifiedUser() && resource.data.ownerId == request.auth.uid;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(entryId) &&
+        isValidWorkspaceTimeEntry(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if (
+        isVerifiedUser() &&
+        isValidId(entryId) &&
+        isValidWorkspaceTimeEntry(incoming()) &&
+        existing().ownerId == request.auth.uid &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        existing().status != 'Locked' && (
+          // Action 1: Update Time Entry Duration and Notes
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'taskCode',
+            'durationMinutes',
+            'notes',
+            'status',
+            'updatedAt'
+          ])
+        )
+      );
+
+      allow delete: if isVerifiedUser() && isValidId(entryId) && existing().ownerId == request.auth.uid;
+    }
+
+    // 7. Collection Rules: /chatThreads/{threadId}
+    match /chatThreads/{threadId} {
+      allow get: if isVerifiedUser() && isValidId(threadId) && existing().ownerId == request.auth.uid;
+      allow list: if isVerifiedUser() && resource.data.ownerId == request.auth.uid;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(threadId) &&
+        isValidChatThread(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if (
+        isVerifiedUser() &&
+        isValidId(threadId) &&
+        isValidChatThread(incoming()) &&
+        existing().ownerId == request.auth.uid &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        existing().status != 'Locked' && (
+          // Action 1: Update Thread Context or Model
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'title',
+            'roleId',
+            'modelId',
+            'linkedTaskCode',
+            'status',
+            'updatedAt'
+          ])
+        )
+      );
+
+      allow delete: if isVerifiedUser() && isValidId(threadId) && existing().ownerId == request.auth.uid;
+
+      // 8. Subcollection Rules: /chatThreads/{threadId}/messages/{messageId} (Master Gate)
+      match /messages/{messageId} {
+        allow get: if isVerifiedUser() &&
+          isValidId(threadId) &&
+          isValidId(messageId) &&
+          existing().ownerId == request.auth.uid &&
+          exists(/databases/$(database)/documents/chatThreads/$(threadId)) &&
+          get(/databases/$(database)/documents/chatThreads/$(threadId)).data.ownerId == request.auth.uid;
+
+        allow list: if isVerifiedUser() && resource.data.ownerId == request.auth.uid;
+
+        allow create: if isVerifiedUser() &&
+          isValidId(threadId) &&
+          isValidId(messageId) &&
+          isValidChatMessage(incoming()) &&
+          incoming().threadId == threadId &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          exists(/databases/$(database)/documents/chatThreads/$(threadId)) &&
+          get(/databases/$(database)/documents/chatThreads/$(threadId)).data.ownerId == request.auth.uid;
+
+        allow update: if (
+          isVerifiedUser() &&
+          isValidId(threadId) &&
+          isValidId(messageId) &&
+          isValidChatMessage(incoming()) &&
+          existing().ownerId == request.auth.uid &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().threadId == existing().threadId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          existing().status != 'Locked' &&
+          exists(/databases/$(database)/documents/chatThreads/$(threadId)) &&
+          get(/databases/$(database)/documents/chatThreads/$(threadId)).data.ownerId == request.auth.uid && (
+            incoming().diff(existing()).affectedKeys().hasOnly(['text', 'status', 'updatedAt'])
+          )
+        );
+
+        allow delete: if isVerifiedUser() &&
+          isValidId(threadId) &&
+          isValidId(messageId) &&
+          existing().ownerId == request.auth.uid &&
+          exists(/databases/$(database)/documents/chatThreads/$(threadId)) &&
+          get(/databases/$(database)/documents/chatThreads/$(threadId)).data.ownerId == request.auth.uid;
+      }
+    }
+  }
+}

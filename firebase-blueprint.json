@@ -1,0 +1,408 @@
+{
+  "entities": {
+    "WorkspaceTask": {
+      "title": "WorkspaceTask",
+      "description": "A developer task tracked in MIHIR Workspace for the Ray project.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the task owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "taskCode": {
+          "type": "string",
+          "description": "Human-readable task identifier such as MIHIR-001.",
+          "minLength": 1,
+          "maxLength": 40,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Task title.",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed task description and requirements.",
+          "minLength": 0,
+          "maxLength": 5000
+        },
+        "projectName": {
+          "type": "string",
+          "description": "Project name such as Ray.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "repositoryName": {
+          "type": "string",
+          "description": "Primary repository name such as raydashboard, rayhubapp, or rayjobapp.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "workingBranch": {
+          "type": "string",
+          "description": "Working Git branch name.",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "baseBranch": {
+          "type": "string",
+          "description": "Base Git branch name.",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "status": {
+          "type": "string",
+          "description": "Current workflow status of the task.",
+          "enum": [
+            "Backlog",
+            "Assigned",
+            "In Progress",
+            "Blocked",
+            "Ready for Testing",
+            "In Review",
+            "Done",
+            "Locked"
+          ],
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "priority": {
+          "type": "string",
+          "description": "Task priority level.",
+          "enum": ["Low", "Medium", "High", "Urgent"],
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "rootCauseSummary": {
+          "type": "string",
+          "description": "Summary of root cause and final engineering solution.",
+          "minLength": 0,
+          "maxLength": 5000
+        },
+        "gitCompletedSteps": {
+          "type": "integer",
+          "description": "Number of completed Git workflow steps (0 to 14)."
+        },
+        "gitTotalSteps": {
+          "type": "integer",
+          "description": "Total number of Git workflow steps."
+        },
+        "isArchived": {
+          "type": "boolean",
+          "description": "Whether the task is archived."
+        },
+        "tags": {
+          "type": "array",
+          "description": "Bounded list of up to 10 task tags."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last update timestamp."
+        }
+      },
+      "required": [
+        "ownerId",
+        "taskCode",
+        "title",
+        "description",
+        "projectName",
+        "repositoryName",
+        "workingBranch",
+        "baseBranch",
+        "status",
+        "priority",
+        "rootCauseSummary",
+        "gitCompletedSteps",
+        "gitTotalSteps",
+        "isArchived",
+        "tags",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "WorkspaceNote": {
+      "title": "WorkspaceNote",
+      "description": "An engineering journal note or daily focus item stored in Cloud Firestore.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the note author.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Note title.",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "content": {
+          "type": "string",
+          "description": "Markdown content of the engineering note.",
+          "minLength": 1,
+          "maxLength": 5000
+        },
+        "relatedTaskCode": {
+          "type": "string",
+          "description": "Optional related task code such as MIHIR-001 or GENERAL.",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "status": {
+          "type": "string",
+          "description": "Lifecycle state of the note.",
+          "enum": ["Active", "Completed", "Locked"],
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "ownerId",
+        "title",
+        "content",
+        "relatedTaskCode",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "WorkspaceTimeEntry": {
+      "title": "WorkspaceTimeEntry",
+      "description": "A time log entry synced to Cloud Firestore.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the developer.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "taskCode": {
+          "type": "string",
+          "description": "Associated task code.",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "durationMinutes": {
+          "type": "integer",
+          "description": "Logged duration in minutes (1 to 1440)."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Work session summary notes.",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "status": {
+          "type": "string",
+          "description": "Entry status.",
+          "enum": ["Logged", "Locked"],
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "ownerId",
+        "taskCode",
+        "durationMinutes",
+        "notes",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ChatThread": {
+      "title": "ChatThread",
+      "description": "A multi-turn Gemini engineering assistant conversation thread.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the thread owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Conversation thread title.",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "roleId": {
+          "type": "string",
+          "description": "Selected engineering persona role identifier.",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "modelId": {
+          "type": "string",
+          "description": "Selected Gemini model identifier.",
+          "enum": [
+            "gemini-4-argon",
+            "gemini-3.8-flash",
+            "gemini-3.1-flash-lite"
+          ],
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "linkedTaskCode": {
+          "type": "string",
+          "description": "Task code attached as context or NONE.",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "status": {
+          "type": "string",
+          "description": "Thread status.",
+          "enum": ["Active", "Locked"],
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "ownerId",
+        "title",
+        "roleId",
+        "modelId",
+        "linkedTaskCode",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "An individual message within a ChatThread subcollection.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the thread owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "threadId": {
+          "type": "string",
+          "description": "Parent ChatThread document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "sender": {
+          "type": "string",
+          "description": "Message role: user or model.",
+          "enum": ["user", "model"],
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "text": {
+          "type": "string",
+          "description": "Markdown message content.",
+          "minLength": 1,
+          "maxLength": 15000
+        },
+        "modelUsed": {
+          "type": "string",
+          "description": "Gemini model used to generate or process the turn.",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "status": {
+          "type": "string",
+          "description": "Message state.",
+          "enum": ["Final", "Locked"],
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "ownerId",
+        "threadId",
+        "sender",
+        "text",
+        "modelUsed",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/WorkspaceTask" },
+      "description": "Cloud-synced developer tasks owned by the authenticated user."
+    },
+    "/workNotes/{noteId}": {
+      "schema": { "$ref": "#/entities/WorkspaceNote" },
+      "description": "Cloud-synced engineering notes and daily focus items."
+    },
+    "/timeEntries/{entryId}": {
+      "schema": { "$ref": "#/entities/WorkspaceTimeEntry" },
+      "description": "Cloud-synced developer time entries."
+    },
+    "/chatThreads/{threadId}": {
+      "schema": { "$ref": "#/entities/ChatThread" },
+      "description": "Multi-turn Gemini engineering assistant conversation threads."
+    },
+    "/chatThreads/{threadId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Ordered messages belonging to a specific ChatThread."
+    }
+  }
+}
