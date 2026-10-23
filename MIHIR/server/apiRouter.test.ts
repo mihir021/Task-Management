@@ -23,6 +23,8 @@ test('async database API preserves task changes, attachment content and backup r
   };
   assert.equal((await api('/health/database')).provider, 'sqlite');
   const { task } = await api('/tasks', 'POST', { title: 'API persistence test' });
+  assert.equal(task.priority, 'Medium'); assert.equal(task.assignedBy, 'Self'); assert.deepEqual(task.repositories, []);
+  assert.match(task.taskCode, /^MIHIR-\d+$/);
   await api(`/tasks/${task.id}`, 'PUT', { title: 'Updated title' });
   assert.equal((await api('/workspace')).tasks.find((item: any) => item.id === task.id).title, 'Updated title');
   const content = Buffer.from('Persistent attachment content').toString('base64');

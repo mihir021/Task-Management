@@ -20,3 +20,22 @@ This starts new terminal sessions for scripts launched in the web app. It does n
 If connection fails, confirm the runner is still running, re-copy the current token, and check the browser's local-network permission. Some browsers or policies block HTTPS-to-loopback requests; use the local workspace's Scripts page in that case. Never bypass certificate warnings or expose this runner on a network address.
 
 Deploy the updated frontend and serverless API together. The hosted `/api/scripts` intentionally returns JSON `503 LOCAL_RUNNER_REQUIRED`; execution happens in the local companion, not in a Vercel function.
+
+## Live pods and ports
+
+Choose **Live pods & ports** to see a current table of matching pods, readiness,
+status, restarts, age, IP and declared container ports, followed by service ports,
+target ports, NodePorts and endpoints. The table refreshes every 30 seconds after
+each completed request; **Refresh now** and **Pause refresh** are available. A
+failed refresh keeps the last successful snapshot and shows the error. Missing
+permission to list services or EndpointSlices does not hide readable pods.
+
+These read-only queries run as the local runner user and do not occupy a terminal
+session. Kubernetes credentials stay on your computer. After updating the runner
+code, stop and restart the runner and pair its new token.
+
+Starting the runner from `sudo su` can make HOME point to `/root`. The runner now
+resolves the original user from SUDO_USER or repository ownership. Existing Ray
+presets using the unreadable `/root/TEMP/k8s-readonly-user-raylife` path are repaired
+only when the corresponding original-user file is readable. Custom paths remain
+unchanged; use **Connection settings** to choose a different kubeconfig.

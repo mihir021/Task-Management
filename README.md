@@ -31,3 +31,14 @@ steps, custom Bash scripts, and an interactive local terminal. See the
 The saved **Kubernetes · ray-job-service logs** script discovers matching pods
 with your read-only kubeconfig, filters errors, and follows replacement pods.
 See the [Kubernetes logs guide](MIHIR/KUBERNETES-LOGS.md) for its controls.
+
+The **Live pods & ports** table refreshes every 30 seconds through the local
+runner. It shows pod health and service/target/NodePort mappings without filling
+the terminal with repeated snapshots. See the [local terminal guide](MIHIR/LOCAL-TERMINAL.md).
+
+## Quick task creation
+
+**New task** needs only a title. Notes are optional; project, priority, due date,
+repositories and other fields are under **More details**. Press Enter in the title
+or Ctrl/Cmd+Enter to save. The server assigns the task ID; new tasks default to
+Todo, Medium priority and Self, with no repository selected automatically.

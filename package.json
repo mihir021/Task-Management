@@ -25,7 +25,8 @@
     "terminal:runner": "tsx MIHIR/server/localRunner.ts",
     "test:terminal-runner": "tsx --test MIHIR/server/localRunner.test.ts",
     "test:auth": "tsx --test MIHIR/server/workspaceAuth.test.ts",
-    "test:database": "tsx --test MIHIR/server/db.test.ts MIHIR/server/database.test.ts MIHIR/server/apiRouter.test.ts"
+    "test:database": "tsx --test MIHIR/server/db.test.ts MIHIR/server/database.test.ts MIHIR/server/apiRouter.test.ts",
+    "test:inventory": "tsx --test MIHIR/server/kubernetesInventory.test.ts MIHIR/src/lib/inventoryPolling.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

@@ -2,13 +2,14 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import os from 'node:os';
+import { resolveRunnerHome, repairRootKubeconfig } from './runnerHome';
+import { inspectKubernetes } from './kubernetesInventory';
 import { defaultScript, validateScript, buildScript } from './scriptBuilder';
 import { ScriptRunner } from './scriptRunner';
 import { RAY_CONTAINERS, type ScriptDefinition } from '../src/types/scripts';
 import { kubernetesServicePresets } from './kubernetesScript';
 
-export function createScriptsRouter({ dataDir, home = os.homedir(), companion }: { dataDir: string; home?: string; companion?: { token: string; origin: string } }) {
+export function createScriptsRouter({ dataDir, home = resolveRunnerHome(), companion }: { dataDir: string; home?: string; companion?: { token: string; origin: string } }) {
   const router = express.Router();
   const token = companion?.token || randomBytes(32).toString('hex');
   const scriptDir = path.join(dataDir, 'scripts');
@@ -19,9 +20,11 @@ export function createScriptsRouter({ dataDir, home = os.homedir(), companion }:
     if (!fs.existsSync(definitions)) {
       fs.writeFileSync(definitions, JSON.stringify([defaultScript(home), ...kubernetesServicePresets(home)], null, 2), { mode: 0o600 });
     }
-    const saved: ScriptDefinition[] = JSON.parse(fs.readFileSync(definitions, 'utf8'));
+    const original: ScriptDefinition[] = JSON.parse(fs.readFileSync(definitions, 'utf8'));
+    const saved = original.map(script => repairRootKubeconfig(script, home));
     const additions = kubernetesServicePresets(home).filter(preset => !saved.some(item => item.id === preset.id));
-    if (additions.length) { saved.push(...additions); saveDefinitions(saved); }
+    if (additions.length) saved.push(...additions);
+    if (additions.length || saved.some((script, index) => script !== original[index])) saveDefinitions(saved);
     return saved;
   }
   function saveDefinitions(items: ScriptDefinition[]) {
@@ -65,8 +68,23 @@ export function createScriptsRouter({ dataDir, home = os.homedir(), companion }:
   });
 
   router.get('/', (_req, res) => {
-    try { res.json({ scripts: readDefinitions(), runs: runner.list(), token, containers: RAY_CONTAINERS, home, terminalAvailable: fs.existsSync('/usr/bin/script') }); }
+    try { res.json({ scripts: readDefinitions(), runs: runner.list(), token, containers: RAY_CONTAINERS, home, capabilities: ['kubernetes-inventory-v1'], terminalAvailable: fs.existsSync('/usr/bin/script') }); }
     catch (value) { error(res, value, 500); }
+  });
+  // Shared in-flight requests prevent overlapping 30-second polls or multiple tabs from spawning duplicate queries.
+  const inventories = new Map<string, ReturnType<typeof inspectKubernetes>>();
+  router.post('/kubernetes/inspect', async (req, res) => {
+    const settings = req.body?.settings;
+    const key = JSON.stringify(settings);
+    try {
+      let pending = inventories.get(key);
+      if (!pending) {
+        if (inventories.size >= 3) { res.status(429).json({ error: 'Three Kubernetes inspections are already in progress. Try again shortly.' }); return; }
+        pending = inspectKubernetes(settings); inventories.set(key, pending);
+        pending.finally(() => { if (inventories.get(key) === pending) inventories.delete(key); }).catch(() => {});
+      }
+      res.json(await pending);
+    } catch (value) { error(res, value); }
   });
   router.post('/preview', (req, res) => {
     try { res.json(buildScript(validateScript(req.body.script))); } catch (value) { error(res, value); }

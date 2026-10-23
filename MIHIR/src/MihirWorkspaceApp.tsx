@@ -343,8 +343,9 @@ export const MihirWorkspaceApp: React.FC = () => {
         method: 'POST',
         body: JSON.stringify(payload),
       },
-      `Created task ${payload.taskCode || ''}`
+      undefined
     );
+    if (res.task) showToast(`Created ${res.task.taskCode}`);
     if (res.task && firebaseUser) {
       syncTaskToFirestore(res.task).catch(() => {});
     }

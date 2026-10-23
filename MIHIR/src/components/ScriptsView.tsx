@@ -1,3 +1,4 @@
+import { KubernetesInventoryView } from './KubernetesInventoryView';
 import { DatabaseStatus } from './DatabaseStatus';
 import { scriptRequest, LOCAL_RUNNER_URL, RUNNER_TOKEN_KEY, isLocalWorkspace } from '../lib/scriptTransport';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -14,11 +15,14 @@ interface Bootstrap {
   containers: string[];
   home: string;
   terminalAvailable: boolean;
+  capabilities?: string[];
 }
 
 export function ScriptsView() {
   const [data, setData] = useState<Bootstrap | null>(null);
   const [draft, setDraft] = useState<ScriptDefinition | null>(null);
+  const [inventorySettings, setInventorySettings] = useState<ScriptDefinition['kubernetes']>(undefined);
+  const inventoryNode = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState('');
   const [previewError, setPreviewError] = useState('');
   const [error, setError] = useState('');
@@ -45,6 +49,8 @@ export function ScriptsView() {
     if (hosted && !token.current) return false;
     try {
       const value = await api<Bootstrap>('');
+      const inspect = value.scripts.find(item => item.kubernetes?.action === 'inspect')?.kubernetes;
+      setInventorySettings(previous => !previous || previous.kubeconfig === '/root/TEMP/k8s-readonly-user-raylife' ? inspect : previous);
       token.current = value.token; setData(value); if (!silent) setError('');
       if (hosted) sessionStorage.setItem(RUNNER_TOKEN_KEY, value.token);
       setDraft(previous => previous || value.scripts.find(item => item.mode === 'kubernetes') || value.scripts[0] || null);
@@ -67,7 +73,7 @@ export function ScriptsView() {
   }
   function disconnectRunner() {
     token.current = ''; sessionStorage.removeItem(RUNNER_TOKEN_KEY);
-    setData(null); setDraft(null); setOpenIds([]); setFocusedId(null); initialized.current = false; setError('');
+    setData(null); setInventorySettings(undefined); setDraft(null); setOpenIds([]); setFocusedId(null); initialized.current = false; setError('');
   }
 
 
@@ -122,7 +128,13 @@ export function ScriptsView() {
     finally { setBusy(false); }
   }
   async function start(script: ScriptDefinition | null = draft) {
-    if (!script) return; setBusy(true); setError(''); setNotice('');
+    if (!script) return;
+    if (script.mode === 'kubernetes' && script.kubernetes?.action === 'inspect') {
+      setInventorySettings({ ...script.kubernetes }); setEditorOpen(false);
+      setTimeout(() => inventoryNode.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+      return;
+    }
+    setBusy(true); setError(''); setNotice('');
     try {
       const value = await api<{ run: ScriptRun }>('/runs', 'POST', { script });
       const runs = [value.run, ...(data?.runs || [])];
@@ -154,8 +166,9 @@ export function ScriptsView() {
   }
   const launchers = data?.scripts.filter(item => ['kubernetes-ray-job-ports', 'kubernetes-ray-job-logs', 'kubernetes-ray-hub-logs', 'kubernetes-ray-controller-logs'].includes(item.id)) || [];
   const activeRuns = data?.runs.filter(item => item.status === 'Running') || [];
+  const inspecting = draft?.mode === 'kubernetes' && draft.kubernetes?.action === 'inspect';
   const exclusiveDraft = draft?.runAsRoot || draft?.mode === 'steps';
-  const blockReason = activeRuns.length >= 3 ? 'Three sessions are running. Stop one to start another.'
+  const blockReason = inspecting ? '' : activeRuns.length >= 3 ? 'Three sessions are running. Stop one to start another.'
     : activeRuns.length && (exclusiveDraft || activeRuns.some(item => item.exclusive || item.runAsRoot || item.mode === 'steps'))
       ? 'Docker and root workflows require all other sessions to be stopped first.' : '';
   const windows = openIds.map(id => data?.runs.find(item => item.id === id)).filter((item): item is ScriptRun => Boolean(item));
@@ -184,9 +197,13 @@ export function ScriptsView() {
       ]).map(item => <div key={item.id} className={`${panel} p-4 flex flex-col gap-3`}>
         <div className="flex items-start justify-between"><span className="rounded-lg bg-indigo-50 dark:bg-indigo-950 p-2 text-indigo-500">{item.id.endsWith('ports') ? <Network size={18} /> : <Radio size={18} />}</span><span className="text-[10px] rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-1 text-slate-500">Read only</span></div>
         <h3 className="font-medium text-sm">{item.name.replace('Kubernetes · ', '').replace('-service logs', ' · Live logs')}</h3><p className="text-xs text-slate-500 flex-1">{'kubernetes' in item && item.kubernetes ? item.kubernetes.action === 'inspect' ? 'Pods, container ports, service ports and endpoints.' : `Live logs from ${item.kubernetes.podPrefix} in ${item.kubernetes.namespace}.` : item.description}</p>
-        <div className="flex gap-2"><button disabled={!data || busy || activeRuns.length >= 3 || activeRuns.some(run => run.exclusive)} onClick={() => { if ('cwd' in item) void start(item as ScriptDefinition); }} className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white px-3 py-2 text-xs"><Play size={13} />{item.id.endsWith('ports') ? 'Inspect ports' : 'Start logs'}</button><button aria-label={`Settings for ${item.name}`} disabled={!data} onClick={() => { if ('cwd' in item) { setDraft(item as ScriptDefinition); setEditorOpen(true); setTimeout(() => editorNode.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0); } }} className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500"><Settings2 size={15} /></button></div>
+        <div className="flex gap-2"><button disabled={!data || busy || (!item.id.endsWith('ports') && (activeRuns.length >= 3 || activeRuns.some(run => run.exclusive)))} onClick={() => { if ('cwd' in item) void start(item as ScriptDefinition); }} className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white px-3 py-2 text-xs"><Play size={13} />{item.id.endsWith('ports') ? 'Live pods & ports' : 'Start logs'}</button><button aria-label={`Settings for ${item.name}`} disabled={!data} onClick={() => { if ('cwd' in item) { setDraft(item as ScriptDefinition); setEditorOpen(true); setTimeout(() => editorNode.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0); } }} className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500"><Settings2 size={15} /></button></div>
       </div>)}</div>
     </section>
+    {data && inventorySettings && <div ref={inventoryNode} className="scroll-mt-20"><KubernetesInventoryView
+      key={`${inventorySettings.kubeconfig}:${inventorySettings.namespace}:${inventorySettings.podPrefix}`}
+      apiBase={apiBase} token={token} initialSettings={inventorySettings} connected={Boolean(data)}
+      supported={Boolean(data.capabilities?.includes('kubernetes-inventory-v1'))} /></div>}
     <section ref={workspaceNode} aria-label="Output workspace" className="space-y-4 scroll-mt-20">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div><h2 className="font-semibold flex items-center gap-2"><PanelsTopLeft className="w-4 h-4 text-indigo-500" />Output workspace <span className="text-xs font-normal text-slate-500">{runningCount}/3 running · {windows.length} windows open</span></h2><p className="text-xs text-slate-500 mt-1">Independent outputs for each service. Expand a window for the full table.</p></div>
@@ -217,8 +234,8 @@ export function ScriptsView() {
         {draft && <section className={`${panel} p-5 space-y-4`}>
           <div className="grid md:grid-cols-2 gap-3"><label className="text-xs font-medium space-y-1 block">Script name<input className={inputClass} value={draft.name} onChange={event => patch({ name: event.target.value })} /></label><label className="text-xs font-medium space-y-1 block">Base directory<input className={`${inputClass} font-mono`} value={draft.cwd} onChange={event => patch({ cwd: event.target.value })} /></label></div>
           {draft.mode !== 'kubernetes' && <div className="flex flex-wrap gap-2">{[['pull-run', 'Pull & run'], ['pull', 'Pull only'], ['start', 'Start only'], ['restart', 'Restart only']].map(([key, label]) => <button key={key} className="rounded-lg px-3 py-2 text-xs border border-indigo-200 dark:border-indigo-900 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950" onClick={() => quick(key)}>{label}</button>)}<button className="rounded-lg px-3 py-2 text-xs border border-slate-300 dark:border-slate-700" onClick={custom}>Custom Bash</button></div>}
-          {<label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={draft.runAsRoot} onChange={event => patch({ runAsRoot: event.target.checked })} /><ShieldCheck className="w-4 h-4 text-indigo-500" />Run as root using sudo</label>}
-          {draft.runAsRoot && <p className="text-xs text-slate-500">Sudo runs this script with root privileges. If prompted, click the terminal and type your password; it stays hidden and is not saved. Your existing HOME is preserved for ~/ray paths.</p>}
+          {!inspecting && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={draft.runAsRoot} onChange={event => patch({ runAsRoot: event.target.checked })} /><ShieldCheck className="w-4 h-4 text-indigo-500" />Run as root using sudo</label>}
+          {!inspecting && draft.runAsRoot && <p className="text-xs text-slate-500">Sudo runs this script with root privileges. If prompted, click the terminal and type your password; it stays hidden and is not saved. Your existing HOME is preserved for ~/ray paths.</p>}
           <div className="flex gap-3 text-sm border-b border-slate-200 dark:border-slate-800 pb-3"><button className={draft.mode === 'steps' ? 'font-semibold text-indigo-600' : 'text-slate-500'} onClick={() => patch({ mode: 'steps' })}>Choose steps</button><button className={draft.mode === 'kubernetes' ? 'font-semibold text-indigo-600' : 'text-slate-500'} onClick={kubernetes}>Kubernetes</button><button className={draft.mode === 'custom' ? 'font-semibold text-indigo-600' : 'text-slate-500'} onClick={custom}>Custom script</button></div>
           {draft.mode === 'steps' ? <>
             <div className="grid sm:grid-cols-2 gap-3 text-sm">{[['pull', 'Pull recent images · pull.sh'], ['up', 'Bring up stack · up.sh'], ['stopAll', 'Stop ALL running Docker containers']].map(([key, label]) => <label key={key} className="flex gap-2 items-center"><input type="checkbox" checked={Boolean(draft[key as keyof ScriptDefinition])} onChange={event => patch({ [key]: event.target.checked })} />{label}</label>)}
@@ -229,7 +246,7 @@ export function ScriptsView() {
             <details><summary className="text-sm cursor-pointer font-medium">Containers / services · {draft.containers.length} selected</summary><div className="flex gap-3 mt-3 text-xs"><button onClick={() => patch({ containers: data?.containers || [] })} className="text-indigo-500">Select all</button><button onClick={() => patch({ containers: [] })} className="text-slate-500">Clear</button></div><div className="grid md:grid-cols-2 gap-2 mt-3">{data?.containers.map(name => <label key={name} className="text-xs flex gap-2 items-center font-mono"><input type="checkbox" checked={draft.containers.includes(name)} onChange={event => patch({ containers: event.target.checked ? [...draft.containers, name] : draft.containers.filter(item => item !== name) })} />{name}</label>)}</div></details>
           </> : draft.mode === 'kubernetes' && draft.kubernetes ? <KubernetesScriptFields value={draft.kubernetes} onChange={value => patch({ kubernetes: value })} /> : <label className="block text-xs font-medium">Bash commands<textarea spellCheck={false} aria-label="Custom Bash commands" className="mt-2 w-full h-64 rounded-xl bg-slate-950 text-slate-200 p-4 font-mono text-xs leading-5 border border-slate-700" value={draft.customBody} onChange={event => patch({ customBody: event.target.value })} /><span className="block text-slate-500 mt-1">Commands run locally in the base directory with the privileges selected above.</span></label>}
           <details><summary className="font-medium text-sm cursor-pointer">Preview exact Bash script</summary>{previewError ? <p className="text-rose-500 text-xs mt-2">{previewError}</p> : <pre className="bg-slate-950 text-slate-300 text-xs p-4 rounded-xl mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-words">{preview}</pre>}</details>
-          <div className="flex flex-wrap gap-3 items-center"><button disabled={busy || Boolean(previewError)} onClick={save} className="rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-sm flex items-center gap-2 disabled:opacity-50"><Save className="w-4 h-4" />Save script</button><button disabled={busy || Boolean(blockReason) || Boolean(previewError) || !data?.terminalAvailable} onClick={() => start()} className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm flex items-center gap-2 disabled:opacity-50"><Play className="w-4 h-4" />Run in new window</button>{notice && <span role="status" className="text-xs text-emerald-600">{notice}</span>}{previewError && <span className="text-xs text-rose-500">{previewError}</span>}{blockReason && <span className="text-xs text-amber-600">{blockReason}</span>}</div>
+          <div className="flex flex-wrap gap-3 items-center"><button disabled={busy || Boolean(previewError)} onClick={save} className="rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-sm flex items-center gap-2 disabled:opacity-50"><Save className="w-4 h-4" />Save script</button><button disabled={busy || Boolean(blockReason) || Boolean(previewError) || (!inspecting && !data?.terminalAvailable)} onClick={() => start()} className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm flex items-center gap-2 disabled:opacity-50"><Play className="w-4 h-4" />{inspecting ? 'Open live table' : 'Run in new window'}</button>{notice && <span role="status" className="text-xs text-emerald-600">{notice}</span>}{previewError && <span className="text-xs text-rose-500">{previewError}</span>}{blockReason && <span className="text-xs text-amber-600">{blockReason}</span>}</div>
         </section>}
       </div>
     </div>
