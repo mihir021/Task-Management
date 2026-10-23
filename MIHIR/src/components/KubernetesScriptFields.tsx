@@ -6,7 +6,6 @@ export function KubernetesScriptFields({ value, onChange }: { value: KubernetesL
   const input = 'mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm';
   return <div className="space-y-4">
     <p className="rounded-lg bg-indigo-50 dark:bg-indigo-950 p-3 text-xs text-indigo-800 dark:text-indigo-200">Read-only Kubernetes monitoring. Discovers matching pods and prefixes logs with their pod/container names. Use sudo below only if your kubeconfig requires root access.</p>
-    <label className="block text-xs font-medium">Action<select className={input} value={value.action || 'logs'} onChange={event => patch({ action: event.target.value as 'logs' | 'inspect' })}><option value="logs">Follow service logs</option><option value="inspect">Inspect pods &amp; ports</option></select></label>
     <label className="block text-xs font-medium">Kubeconfig path<input className={`${input} font-mono`} value={value.kubeconfig} onChange={event => patch({ kubeconfig: event.target.value })} /></label>
     <div className="grid md:grid-cols-2 gap-3">
       <label className="text-xs font-medium">Namespace<input className={input} value={value.namespace} onChange={event => patch({ namespace: event.target.value })} /></label>

@@ -3,6 +3,7 @@ import { Activity, CheckCircle2, ChevronDown, Clock3, Copy, Network, Pause, Play
 import type { KubernetesLogSettings } from '../types/scripts';
 import type { KubernetesInventory } from '../types/kubernetesInventory';
 import { scriptRequest } from '../lib/scriptTransport';
+import { PORT_MAPPINGS, mappedInventory, matchesPortService } from '../lib/portMappings';
 import { startInventoryPolling } from '../lib/inventoryPolling';
 
 function age(created: string | null, now: number) {
@@ -21,13 +22,15 @@ const tones = {
   completed: 'bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300',
 };
 
-export function KubernetesInventoryView({ apiBase, token, initialSettings, connected, supported }: {
+export function KubernetesInventoryView({ apiBase, token, initialSettings, connected, supported, mapped = false }: {
   apiBase: string; token: React.MutableRefObject<string>; initialSettings: KubernetesLogSettings;
-  connected: boolean; supported: boolean;
+  connected: boolean; supported: boolean; mapped?: boolean;
 }) {
   const [settings, setSettings] = useState(initialSettings);
   const [form, setForm] = useState(initialSettings);
-  const [snapshot, setSnapshot] = useState<KubernetesInventory | null>(null);
+  const [inventory, setSnapshot] = useState<KubernetesInventory | null>(null);
+  const [selected, setSelected] = useState('');
+  const snapshot = inventory && mapped ? mappedInventory(inventory, selected) : inventory;
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [automatic, setAutomatic] = useState(true);
@@ -64,7 +67,7 @@ export function KubernetesInventoryView({ apiBase, token, initialSettings, conne
   return <section aria-label="Live pods and ports" className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden scroll-mt-20">
     <header className="p-5 sm:p-6 border-b border-slate-200 dark:border-slate-800">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div><p className="text-[10px] uppercase tracking-[0.18em] font-semibold text-indigo-500 mb-2">Kubernetes · read only</p><h2 className="text-xl font-semibold flex items-center gap-2"><Network size={21} className="text-indigo-500" />Live pods &amp; ports</h2><p className="text-sm text-slate-500 mt-2"><span className="font-mono text-slate-700 dark:text-slate-300">{settings.podPrefix}</span> <span className="mx-1">/</span> {settings.namespace} namespace</p></div>
+        <div><p className="text-[10px] uppercase tracking-[0.18em] font-semibold text-indigo-500 mb-2">Kubernetes · read only</p><h2 className="text-xl font-semibold flex items-center gap-2"><Network size={21} className="text-indigo-500" />Live pods &amp; ports</h2><p className="text-sm text-slate-500 mt-2"><span className="font-mono text-slate-700 dark:text-slate-300">{mapped ? '4 application services' : settings.podPrefix}</span> <span className="mx-1">/</span> {settings.namespace} namespace</p></div>
         <div className="flex gap-2"><button disabled={!ready} onClick={toggle} className="flex items-center gap-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 disabled:opacity-40">{automatic ? <Pause size={14} /> : <Play size={14} />}{automatic ? 'Pause refresh' : 'Resume refresh'}</button><button disabled={!ready || busy} onClick={() => polling.current?.refresh()} className="flex items-center gap-2 text-xs rounded-lg bg-indigo-600 text-white px-3 py-2 disabled:opacity-40"><RefreshCw size={14} className={busy ? 'animate-spin' : ''} />Refresh now</button></div>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-500">
@@ -74,7 +77,7 @@ export function KubernetesInventoryView({ apiBase, token, initialSettings, conne
       </div>
       <details className="mt-4"><summary className="cursor-pointer text-xs text-slate-500 flex items-center gap-2 w-fit"><Settings2 size={13} />Connection settings<ChevronDown size={12} /></summary><form className="mt-3 grid sm:grid-cols-2 gap-3" onSubmit={event => { event.preventDefault(); if (JSON.stringify(form) === settingsKey) void polling.current?.refresh(); else setSettings({ ...form }); }}>
         <label className="text-xs sm:col-span-2">Kubeconfig path<input required className={`${input} font-mono`} value={form.kubeconfig} onChange={event => setForm({ ...form, kubeconfig: event.target.value })} /></label>
-        <label className="text-xs">Namespace<input required className={input} value={form.namespace} onChange={event => setForm({ ...form, namespace: event.target.value })} /></label><label className="text-xs">Pod name prefix<input required className={input} value={form.podPrefix} onChange={event => setForm({ ...form, podPrefix: event.target.value })} /></label>
+        <label className="text-xs">Namespace<input required className={input} value={form.namespace} onChange={event => setForm({ ...form, namespace: event.target.value })} /></label>{!mapped && <label className="text-xs">Pod name prefix<input required className={input} value={form.podPrefix} onChange={event => setForm({ ...form, podPrefix: event.target.value })} /></label>}
         <div className="sm:col-span-2 flex flex-wrap items-center gap-3"><button className="rounded-lg px-3 py-2 bg-indigo-600 text-white text-xs">Apply &amp; refresh</button><span className="text-xs text-slate-500">Uses the runner’s current user. Kubeconfig stays on this computer.</span></div>
       </form></details>
     </header>
@@ -82,6 +85,19 @@ export function KubernetesInventoryView({ apiBase, token, initialSettings, conne
     {connected && !supported && <div role="alert" className="p-6 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-200 text-sm"><p className="font-medium">Restart your local runner to enable live tables.</p><p className="mt-2">Stop the old runner with Ctrl+C, run <code>./scripts/start-terminal-runner.sh</code> again from the workspace folder, and reconnect using its new token.</p></div>}
     {error && <div role="alert" className="m-5 p-4 rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-sm flex items-start gap-2"><TriangleAlert size={17} className="shrink-0 mt-0.5" /><div><p>{error}</p>{snapshot && <p className="text-xs mt-2">Showing the last successful snapshot. These rows may be out of date.</p>}</div></div>}
     {ready && !snapshot && !error && <p role="status" className="p-8 text-sm text-slate-500">Loading pod status and service ports…</p>}
+    {mapped && <div className="p-5 sm:p-6 border-b border-slate-200 dark:border-slate-800">
+      <div className="flex justify-between items-center mb-3"><h3 className="font-medium text-sm">Application → service → port</h3><button onClick={() => setSelected('')} className={`text-xs px-3 py-1.5 rounded-lg ${!selected ? 'bg-indigo-600 text-white' : 'text-indigo-500 border border-indigo-200 dark:border-indigo-900'}`}>Show all apps</button></div>
+      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">{PORT_MAPPINGS.map(mapping => {
+        const pods = inventory?.pods.filter(pod => matchesPortService(pod.name, mapping.service)) || [];
+        const service = inventory?.services.find(item => item.name === mapping.service);
+        const healthy = pods.filter(pod => pod.health === 'healthy').length;
+        return <button key={mapping.service} aria-pressed={selected === mapping.service} onClick={() => setSelected(selected === mapping.service ? '' : mapping.service)} className={`text-left rounded-xl border p-4 ${selected === mapping.service ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950'}`}>
+          <span className="text-sm font-semibold block">{mapping.app}</span><span className="font-mono text-[11px] text-slate-500 block mt-2 break-all">{mapping.service}</span>
+          <span className="block text-xs mt-3 font-mono">{service ? service.ports.map(port => `${port.nodePort ? `${port.nodePort} → ` : ''}${port.port} → ${port.targetPort}/${port.protocol}`).join(', ') : inventory ? 'Service not found' : 'Waiting for cluster…'}</span>
+          <span className={`block text-xs mt-3 ${inventory && healthy !== pods.length ? 'text-amber-600' : 'text-emerald-600 dark:text-emerald-400'}`}>{inventory ? `${healthy}/${pods.length} pods ready` : 'Not loaded'}</span>
+        </button>;
+      })}</div><p className="text-xs text-slate-500 mt-3">Port mapping: NodePort → service port → target port. Select an app to filter its pods and services. Internal and headless services appear in the table below.</p>
+    </div>}
     {snapshot && <>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-5 sm:px-6 py-5">
         {[[Activity, 'Pods', snapshot.pods.length], [CheckCircle2, 'Ready', healthy], [TriangleAlert, 'Need attention', issues], [Network, 'Services', snapshot.services.length]].map(([Icon, title, value]) => {

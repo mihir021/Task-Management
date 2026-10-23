@@ -7,6 +7,7 @@ import express from 'express';
 import { kubernetesPreset } from './kubernetesScript';
 import { parseInventory, inspectKubernetes, queryInventory } from './kubernetesInventory';
 import { resolveRunnerHome, repairRootKubeconfig } from './runnerHome';
+import { PORT_MAPPINGS, mappedInventory, matchesPortService } from '../src/lib/portMappings';
 import { createScriptsRouter } from './scriptsRouter';
 
 const settings = kubernetesPreset('/home/example').kubernetes!;
@@ -79,4 +80,14 @@ test('paired inventory API reads kubectl JSON, coalesces concurrent polls and ke
   const bootstrap = await (await fetch(base, { headers: { Origin: origin, 'X-Mihir-Scripts-Token': token } })).json();
   assert.ok(bootstrap.capabilities.includes('kubernetes-inventory-v1'));
   assert.equal((await queryInventory('pods', { ...settings, kubeconfig: config }) as any).items.length, 3);
+});
+
+test('application mappings include internal gateway variants without matching unrelated services', () => {
+  assert.deepEqual(PORT_MAPPINGS.map(item => item.service), ['ray-controller-service', 'ray-job-service', 'ray-gateway-service', 'ray-hub-service']);
+  assert.equal(matchesPortService('ray-job-service-extra', 'ray-job-service'), true);
+  assert.equal(matchesPortService('ray-job-serviceother', 'ray-job-service'), false);
+  const inventory = parseInventory({ ...settings, podPrefix: 'ray-' }, { items: [pod('ray-job-service-a'), pod('ray-hub-service-b'), pod('ray-audit-service-c'), pod('ray-gateway-service-internal-d')] }, { items: [] }, { items: [] });
+  assert.equal(mappedInventory(inventory).pods.length, 3);
+  assert.deepEqual(mappedInventory(inventory, 'ray-gateway-service').pods.map(pod => pod.name), ['ray-gateway-service-internal-d']);
+  assert.deepEqual(mappedInventory(inventory, 'ray-controller-service').pods, []);
 });

@@ -23,7 +23,7 @@ Deploy the updated frontend and serverless API together. The hosted `/api/script
 
 ## Live pods and ports
 
-Choose **Live pods & ports** to see a current table of matching pods, readiness,
+Open **Ports Monitoring** from the sidebar to see a current table of matching pods, readiness,
 status, restarts, age, IP and declared container ports, followed by service ports,
 target ports, NodePorts and endpoints. The table refreshes every 30 seconds after
 each completed request; **Refresh now** and **Pause refresh** are available. A
@@ -39,3 +39,10 @@ resolves the original user from SUDO_USER or repository ownership. Existing Ray
 presets using the unreadable `/root/TEMP/k8s-readonly-user-raylife` path are repaired
 only when the corresponding original-user file is readable. Custom paths remain
 unchanged; use **Connection settings** to choose a different kubeconfig.
+
+Ports Monitoring groups Ray app → ray-controller-service, Job app → ray-job-service,
+Gateway → ray-gateway-service, and Hub app → ray-hub-service. Cards show live
+NodePort → service port → target port mappings and ready pod counts. Select a card
+to filter the tables, or choose Show all apps. Internal and headless variants stay
+visible with their full service names. One namespace snapshot feeds all four apps
+every 30 seconds. Scripts retains log workflows; port inspection has moved out.

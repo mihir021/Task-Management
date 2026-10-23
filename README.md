@@ -32,7 +32,7 @@ The saved **Kubernetes · ray-job-service logs** script discovers matching pods
 with your read-only kubeconfig, filters errors, and follows replacement pods.
 See the [Kubernetes logs guide](MIHIR/KUBERNETES-LOGS.md) for its controls.
 
-The **Live pods & ports** table refreshes every 30 seconds through the local
+The **Ports Monitoring** sidebar section maps Ray app, Job app, Gateway and Hub app to their services. Its tables refresh every 30 seconds through the local
 runner. It shows pod health and service/target/NodePort mappings without filling
 the terminal with repeated snapshots. See the [local terminal guide](MIHIR/LOCAL-TERMINAL.md).
 

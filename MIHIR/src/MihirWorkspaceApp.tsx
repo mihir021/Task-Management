@@ -22,6 +22,7 @@ import {
   Command,
   Activity,
   Terminal,
+  Network,
 } from 'lucide-react';
 import {
   DuplicatePolicy,
@@ -45,6 +46,7 @@ import { ProjectsReposView } from './components/ProjectsReposView';
 import { WorkLogView } from './components/WorkLogView';
 import { MonitorView } from './components/MonitorView';
 import { ScriptsView } from './components/ScriptsView';
+import { PortsMonitoringView } from './components/PortsMonitoringView';
 import { SettingsView } from './components/SettingsView';
 import { NewTaskModal } from './components/NewTaskModal';
 import { QuickLogTimeModal, QuickWorkNoteModal } from './components/QuickModals';
@@ -64,7 +66,7 @@ import {
   User,
 } from './lib/firebaseClient';
 
-type MainSection = 'dashboard' | 'tasks' | 'projects' | 'worklog' | 'monitor' | 'scripts' | 'copilot' | 'settings';
+type MainSection = 'dashboard' | 'tasks' | 'projects' | 'worklog' | 'monitor' | 'ports' | 'scripts' | 'copilot' | 'settings';
 
 export const MihirWorkspaceApp: React.FC = () => {
   const [workspace, setWorkspace] = useState<WorkspaceStatePayload | null>(null);
@@ -77,7 +79,7 @@ export const MihirWorkspaceApp: React.FC = () => {
       const saved = localStorage.getItem('mihir_active_section');
       if (
         saved &&
-        ['dashboard', 'tasks', 'projects', 'worklog', 'monitor', 'scripts', 'copilot', 'settings'].includes(saved)
+        ['dashboard', 'tasks', 'projects', 'worklog', 'monitor', 'ports', 'scripts', 'copilot', 'settings'].includes(saved)
       ) {
         return saved as MainSection;
       }
@@ -687,6 +689,7 @@ export const MihirWorkspaceApp: React.FC = () => {
     },
     { id: 'worklog', label: 'Work Log', icon: Clock },
     { id: 'monitor', label: 'Monitor', icon: Activity, badge: workspace.tasks.filter(task => !task.isArchived && task.status === 'Monitor Logs & Process').length },
+    { id: 'ports', label: 'Ports Monitoring', icon: Network },
     { id: 'scripts', label: 'Scripts', icon: Terminal },
     { id: 'copilot', label: 'AI Copilot', icon: Sparkles },
     { id: 'settings', label: 'Settings', icon: Settings },
@@ -905,6 +908,8 @@ export const MihirWorkspaceApp: React.FC = () => {
                 ? 'Ray / Work Log'
                 : activeSection === 'monitor'
                 ? 'Ray / Monitor'
+                : activeSection === 'ports'
+                  ? 'Ray / Ports Monitoring'
                 : activeSection === 'scripts'
                 ? 'Ray / Scripts'
                 : activeSection === 'copilot'
@@ -1163,6 +1168,8 @@ export const MihirWorkspaceApp: React.FC = () => {
               onSaveWorkNote={handleSaveWorkNote}
               onDeleteWorkNote={handleDeleteWorkNote}
             />
+          ) : activeSection === 'ports' ? (
+            <PortsMonitoringView />
           ) : activeSection === 'scripts' ? (
             <ScriptsView />
           ) : activeSection === 'monitor' ? (
