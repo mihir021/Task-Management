@@ -37,6 +37,7 @@ import {
 } from './types/workspace';
 import { getNextTaskCodeFromList } from './lib/taskCodeHelper';
 import { summarizeTaskChecklistProgress } from './lib/workspaceLogic';
+import { DatabaseStatus } from './components/DatabaseStatus';
 import { DashboardView } from './components/DashboardView';
 import { TaskListView } from './components/TaskListView';
 import { TaskDetailTab, TaskDetailView } from './components/TaskDetailView';
@@ -632,7 +633,7 @@ export const MihirWorkspaceApp: React.FC = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-400">
         <div className="space-y-3 text-center">
-          <div className="text-sm font-mono">Loading MIHIR Workspace (SQLite + Cloud Sync)...</div>
+          <div className="text-sm font-mono">Loading MIHIR Workspace...</div>
         </div>
       </div>
     );
@@ -644,6 +645,7 @@ export const MihirWorkspaceApp: React.FC = () => {
         <div className="p-6 rounded-xl bg-white dark:bg-slate-900 border border-red-300 dark:border-red-900 max-w-md space-y-3 text-center">
           <h1 className="text-base font-semibold text-red-600">Workspace Storage Error</h1>
           <p className="text-xs text-slate-600 dark:text-slate-400">{errorBanner}</p>
+          <DatabaseStatus />
           <button
             type="button"
             onClick={fetchWorkspace}
@@ -783,7 +785,7 @@ export const MihirWorkspaceApp: React.FC = () => {
                   </button>
                 </div>
                 <div className="flex items-center justify-between text-[10px] font-mono text-emerald-700 dark:text-emerald-400">
-                  <span>Firestore: {cloudSyncedTaskCount} tasks</span>
+                  <span>Firestore: {cloudSyncedTaskCount} summaries</span>
                   <button
                     type="button"
                     disabled={syncingCloud}
@@ -801,7 +803,7 @@ export const MihirWorkspaceApp: React.FC = () => {
                 className="w-full flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800/70 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 font-medium text-xs transition-colors"
               >
                 <LogIn className="w-3.5 h-3.5" />
-                <span>Sign in with Google (Cloud Sync)</span>
+                <span>Google sign-in (summary sync)</span>
               </button>
             )}
 

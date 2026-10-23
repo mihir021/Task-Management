@@ -1,0 +1,39 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import express from 'express';
+
+test('async database API preserves task changes, attachment content and backup restoration', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mihir-api-'));
+  process.env.MIHIR_DATA_DIR = path.join(dir, 'data'); process.env.MIHIR_UPLOADS_DIR = path.join(dir, 'uploads');
+  delete process.env.VERCEL; delete process.env.MIHIR_USE_CLOUD_DB;
+  const { apiRouter } = await import('./apiRouter');
+  const { getNextTaskCode } = await import('./db');
+  const codes = await Promise.all(Array.from({ length: 8 }, () => getNextTaskCode()));
+  assert.equal(new Set(codes).size, 8);
+  const app = express(); app.use(express.json({ limit: '50mb' })); app.use('/api', apiRouter);
+  const server = app.listen(0, '127.0.0.1'); await new Promise<void>(resolve => server.once('listening', resolve));
+  t.after(async () => { await new Promise<void>(resolve => server.close(() => resolve())); fs.rmSync(dir, { recursive: true, force: true }); });
+  const base = `http://127.0.0.1:${(server.address() as any).port}/api`;
+  const api = async (route: string, method = 'GET', body?: unknown) => {
+    const response = await fetch(base + route, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+    const value = await response.json(); assert.ok(response.ok, JSON.stringify(value)); return value;
+  };
+  assert.equal((await api('/health/database')).provider, 'sqlite');
+  const { task } = await api('/tasks', 'POST', { title: 'API persistence test' });
+  await api(`/tasks/${task.id}`, 'PUT', { title: 'Updated title' });
+  assert.equal((await api('/workspace')).tasks.find((item: any) => item.id === task.id).title, 'Updated title');
+  const content = Buffer.from('Persistent attachment content').toString('base64');
+  const { attachment } = await api(`/tasks/${task.id}/attachments`, 'POST', { originalName: 'proof.txt', mimeType: 'text/plain', base64Data: content });
+  const read = await fetch(`http://127.0.0.1:${(server.address() as any).port}` + attachment.url);
+  assert.equal(await read.text(), 'Persistent attachment content');
+  const bundle = await api('/backup/export');
+  assert.ok(bundle.uploadedFiles.some((file: any) => file.base64Data === content));
+  await api('/workspace/clear-all', 'POST');
+  assert.equal((await api('/workspace')).tasks.length, 0);
+  await api('/backup/restore', 'POST', { bundle, duplicatePolicy: 'skip' });
+  assert.equal((await api('/workspace')).tasks.find((item: any) => item.id === task.id).title, 'Updated title');
+  assert.equal(await (await fetch(`http://127.0.0.1:${(server.address() as any).port}` + attachment.url)).text(), 'Persistent attachment content');
+});

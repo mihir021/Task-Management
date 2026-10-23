@@ -52,3 +52,21 @@ test('client rejects non-local origins before sending data', async () => {
     assert.throws(() => requestApi(origin, 'POST', '/tasks', { title: 'Example' }), /loopback/);
   }
 });
+
+test('password-protected local client keeps the session cookie in memory', async t => {
+  const server = http.createServer(async (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/api/auth/login') {
+      let raw = ''; for await (const chunk of req) raw += chunk;
+      assert.equal(JSON.parse(raw).password, 'test-password');
+      res.setHeader('Set-Cookie', 'mihir_workspace_session=test-session; HttpOnly; SameSite=Strict');
+      res.end('{"authenticated":true}'); return;
+    }
+    assert.equal(req.headers.cookie, 'mihir_workspace_session=test-session');
+    res.end(JSON.stringify({ tasks: [], repositories: [], projects: [], workNotes: [], timeEntries: [] }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const result = await run(['status'], { baseUrl: `http://127.0.0.1:${server.address().port}`, password: 'test-password' });
+  assert.equal(result.connected, true); assert.doesNotMatch(JSON.stringify(result), /test-password|test-session/);
+});

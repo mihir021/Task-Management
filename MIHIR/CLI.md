@@ -58,7 +58,7 @@ read the workspace before retrying to avoid duplicate records. An open website
 may need a refresh to display changes made by the client.
 
 `MIHIR_WORKSPACE_URL` can select another loopback HTTP port; external hosts and
-redirects are rejected. No API authentication or server exposure is changed.
+redirects are rejected. The local client retains its loopback-only restriction. Set MIHIR_WORKSPACE_PASSWORD in your shell to authenticate with the workspace password screen; the session cookie stays in this process. Never pass the password as a command-line argument.
 
 Agents can use this client when asked to manage the workspace. This is a local
 command-line integration, not a registered MCP connector, and does not run in the

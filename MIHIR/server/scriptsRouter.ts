@@ -19,7 +19,10 @@ export function createScriptsRouter({ dataDir, home = os.homedir(), companion }:
     if (!fs.existsSync(definitions)) {
       fs.writeFileSync(definitions, JSON.stringify([defaultScript(home), ...kubernetesServicePresets(home)], null, 2), { mode: 0o600 });
     }
-    return JSON.parse(fs.readFileSync(definitions, 'utf8'));
+    const saved: ScriptDefinition[] = JSON.parse(fs.readFileSync(definitions, 'utf8'));
+    const additions = kubernetesServicePresets(home).filter(preset => !saved.some(item => item.id === preset.id));
+    if (additions.length) { saved.push(...additions); saveDefinitions(saved); }
+    return saved;
   }
   function saveDefinitions(items: ScriptDefinition[]) {
     const temp = definitions + '.' + randomUUID() + '.tmp';

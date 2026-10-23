@@ -21,10 +21,11 @@ Usage: npm run workspace -- COMMAND [TASK-ID-OR-CODE] [JSON-FILE|-]
 
 Use - to read JSON from stdin. Server must be running; browser can be closed.
 MIHIR_WORKSPACE_URL defaults to http://127.0.0.1:3000 (loopback only).
+Set MIHIR_WORKSPACE_PASSWORD to authenticate with a password-protected local app.
 Writes print the saved record; they are never retried automatically.
 `;
 
-export function requestApi(baseUrl, method, route, body) {
+export function requestApi(baseUrl, method, route, body, session = {}) {
   const base = new URL(baseUrl);
   if (base.protocol !== 'http:' || !['localhost', '127.0.0.1', '[::1]'].includes(base.hostname)
       || base.username || base.password || base.pathname !== '/' || base.search || base.hash) {
@@ -35,7 +36,8 @@ export function requestApi(baseUrl, method, route, body) {
   return new Promise((resolve, reject) => {
     const req = http.request(url, {
       method,
-      headers: data === undefined ? { Accept: 'application/json' } : {
+      headers: data === undefined ? { Accept: 'application/json', ...(session.cookie ? { Cookie: session.cookie } : {}) } : {
+        ...(session.cookie ? { Cookie: session.cookie } : {}),
         Accept: 'application/json', 'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(data),
       },
@@ -50,7 +52,10 @@ export function requestApi(baseUrl, method, route, body) {
         catch { reject(new Error('Server returned non-JSON data. Check the workspace server address.')); return; }
         if (res.statusCode < 200 || res.statusCode >= 300) {
           reject(new Error(`API ${res.statusCode}: ${result.error || 'Request failed'}`));
-        } else resolve(result);
+        } else {
+          if (route === '/auth/login' && res.headers['set-cookie']?.[0]) session.cookie = res.headers['set-cookie'][0].split(';')[0];
+          resolve(result);
+        }
       });
     });
     req.setTimeout(10000, () => req.destroy(new Error('Workspace request timed out. Check the server before retrying a write.')));
@@ -73,12 +78,14 @@ function validateTask(body) {
   if (body.title !== undefined && (typeof body.title !== 'string' || !body.title.trim())) throw new Error('Task title must not be empty.');
 }
 
-export async function run(args, { baseUrl = process.env.MIHIR_WORKSPACE_URL || 'http://127.0.0.1:3000', payload = readPayload } = {}) {
+export async function run(args, { baseUrl = process.env.MIHIR_WORKSPACE_URL || 'http://127.0.0.1:3000', payload = readPayload, password = process.env.MIHIR_WORKSPACE_PASSWORD } = {}) {
   const [command = 'help', ...rest] = args;
   if (['help', '--help', '-h'].includes(command)) return HELP;
   const arity = { status: 0, tasks: 0, show: 1, repositories: 0, notes: 0, time: 0, activity: 0, focus: 0, create: 1, update: 2, note: 1, 'log-time': 2 };
   if (!Object.prototype.hasOwnProperty.call(arity, command) || rest.length !== arity[command]) throw new Error('Invalid command or arguments. Use --help.');
-  const api = (method, route, body) => requestApi(baseUrl, method, route, body);
+  const session = {};
+  if (password) await requestApi(baseUrl, 'POST', '/auth/login', { password }, session);
+  const api = (method, route, body) => requestApi(baseUrl, method, route, body, session);
   const taskFrom = async reference => {
     const state = await api('GET', '/workspace');
     const matches = state.tasks.filter(t => t.id === reference || t.taskCode.toLowerCase() === reference.toLowerCase());

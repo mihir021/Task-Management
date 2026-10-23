@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { RAY_CONTAINERS, type ScriptDefinition, type RunStep } from '../src/types/scripts';
-import { validateKubernetes, buildKubernetes } from './kubernetesScript';
+import { validateKubernetes, buildKubernetes, buildKubernetesInspection } from './kubernetesScript';
 
 export function quoteShell(value: string) { return "'" + value.replace(/'/g, "'\\''") + "'"; }
 
@@ -55,9 +55,13 @@ export function buildScript(script: ScriptDefinition): { source: string; steps: 
       `printf '\\033]777;MIHIR_STEP:${id}:Passed\\007'`);
   }
   if (script.mode === 'kubernetes') {
+    if (script.kubernetes?.action === 'inspect') {
+      step('pods-ports', 'Inspect pods, container ports and services', buildKubernetesInspection(validateKubernetes(script.kubernetes)));
+    } else {
     const kubernetes = buildKubernetes(validateKubernetes(script.kubernetes));
     step('kube-check', 'Check Kubernetes log settings', kubernetes.setup);
     step('pod-logs', 'Discover pods and monitor logs', kubernetes.monitor);
+    }
   } else if (script.mode === 'custom') step('custom', 'Run custom commands', script.customBody);
   else {
     const services = script.selectedServicesOnly ? ' ' + script.containers.map(quoteShell).join(' ') : '';

@@ -23,10 +23,13 @@
     "lint": "tsc --noEmit",
     "test": "tsx --test MIHIR/src/lib/workspaceLogic.test.ts",
     "terminal:runner": "tsx MIHIR/server/localRunner.ts",
-    "test:terminal-runner": "tsx --test MIHIR/server/localRunner.test.ts"
+    "test:terminal-runner": "tsx --test MIHIR/server/localRunner.test.ts",
+    "test:auth": "tsx --test MIHIR/server/workspaceAuth.test.ts",
+    "test:database": "tsx --test MIHIR/server/db.test.ts MIHIR/server/database.test.ts MIHIR/server/apiRouter.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
+    "@libsql/client": "^0.18.0",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^6.1.1",
     "@xterm/addon-fit": "^0.11.0",

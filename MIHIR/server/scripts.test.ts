@@ -265,3 +265,25 @@ test('Kubernetes monitoring rediscovers a replacement pod and stops the old stre
     assert.throws(() => process.kill(pid, 0), /ESRCH|No such process/);
   }
 });
+
+test('pods and ports preset runs only read-only commands and prints service target ports', async t => {
+  const home = temporary(t); const bin = path.join(home, 'bin'); fs.mkdirSync(bin);
+  const config = path.join(home, 'config'); fs.writeFileSync(config, 'mock config');
+  fs.writeFileSync(path.join(bin, 'kubectl'), `#!/bin/bash
+case "$*" in
+  *'get pods -o wide'*) printf 'NAME READY STATUS\\nray-job-service-123 1/1 Running\\nother-service-123 1/1 Running\\n' ;;
+  *'get pods -o=custom-columns='*) printf 'POD CONTAINER PORTS\\nray-job-service-123 job 8080\\nother-service-123 other 9999\\n' ;;
+  *'get services -o=custom-columns='*) printf 'SERVICE TYPE PORT TARGET NODEPORT\\nray-job-service ClusterIP 80 8080 <none>\\n' ;;
+  *'get endpoints -o wide'*) printf 'NAME ENDPOINTS AGE\\nray-job-service 10.0.0.1:8080 1d\\n' ;;
+  *) printf 'unexpected command: %s\\n' "$*" >&2; exit 9 ;;
+esac
+`, { mode: 0o700 });
+  const preset = kubernetesPreset(home); preset.kubernetes = { ...preset.kubernetes!, action: 'inspect', kubeconfig: config };
+  const script = buildScript(preset); assert.deepEqual(script.steps.map(step => step.id), ['pods-ports']);
+  assert.doesNotMatch(script.source, /kubectl.*(?:delete|apply|port-forward)/);
+  const result = spawnSync('/bin/bash', ['-c', script.source], { env: { ...process.env, PATH: bin + ':' + process.env.PATH }, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr); assert.match(result.stdout, /ray-job-service-123/);
+  assert.match(result.stdout, /80 8080/); assert.match(result.stdout, /10.0.0.1:8080/);
+  assert.doesNotMatch(result.stdout, /other-service-123/);
+  assert.throws(() => validateKubernetes({ ...preset.kubernetes!, action: 'delete' as any }), /Invalid/);
+});

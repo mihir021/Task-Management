@@ -18,14 +18,14 @@ export function kubernetesPreset(home: string): ScriptDefinition {
 
 export function kubernetesServicePresets(home: string): ScriptDefinition[] {
   const base = kubernetesPreset(home);
-  return [base, ...['hub', 'controller'].map(service => ({
-    ...base, id: `kubernetes-ray-${service}-logs`, name: `Kubernetes · ray-${service}-service logs`,
+  return [{ ...base, id: 'kubernetes-ray-job-ports', name: 'Ray job · Pods & ports', description: 'List matching pods, container ports, service ports and endpoints.', kubernetes: { ...base.kubernetes!, action: 'inspect', follow: false, reconnect: false } }, base, ...['hub', 'controller'].map(service => ({
+    ...base, id: `kubernetes-ray-${service}-logs`, name: `Kubernetes · ray-${service}-service logs`, description: `Read-only log monitoring across the current ray-${service}-service pods.`,
     kubernetes: { ...base.kubernetes!, podPrefix: `ray-${service}-service` },
   }))];
 }
 
 export function validateKubernetes(value: KubernetesLogSettings | undefined): KubernetesLogSettings {
-  if (!value || typeof value.kubeconfig !== 'string' || !path.isAbsolute(value.kubeconfig) || /[\0\r\n]/.test(value.kubeconfig)
+  if (!value || (value.action !== undefined && !['logs', 'inspect'].includes(value.action)) || typeof value.kubeconfig !== 'string' || !path.isAbsolute(value.kubeconfig) || /[\0\r\n]/.test(value.kubeconfig)
     || typeof value.namespace !== 'string' || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(value.namespace)
     || typeof value.podPrefix !== 'string' || !/^[a-z0-9][a-z0-9.-]{0,252}$/.test(value.podPrefix)
     || typeof value.container !== 'string' || (value.container && !/^[a-z0-9][a-z0-9-]{0,62}$/.test(value.container))
@@ -63,4 +63,28 @@ export function buildKubernetes(settings: KubernetesLogSettings) {
     'printf "Read-only: get pods + logs. Ctrl+C stops monitoring.\\n"',
   ].join('\n');
   return { setup, monitor: fs.readFileSync(new URL('./kubernetes-monitor.sh', import.meta.url), 'utf8') };
+}
+
+export function buildKubernetesInspection(settings: KubernetesLogSettings) {
+  return [
+    `export KUBECONFIG=${quote(settings.kubeconfig)}`,
+    '[[ -r "$KUBECONFIG" ]] || { printf "Kubeconfig file is not readable.\\n" >&2; exit 1; }',
+    'command -v kubectl >/dev/null || { printf "kubectl is not installed.\\n" >&2; exit 1; }',
+    `namespace=${quote(settings.namespace)}`,
+    `prefix=${quote(settings.podPrefix)}`,
+    'printf "Matching pods (namespace: %s)\\n" "$namespace"',
+    'pods=$(kubectl --request-timeout=20s -n "$namespace" get pods -o wide)',
+    'printf "%s\\n" "$pods" | head -n 1',
+    `printf "%s\\n" "$pods" | awk -v prefix="$prefix" 'NR > 1 && index($1, prefix) == 1'`,
+    'printf "\\nContainer ports (POD | CONTAINER | PORTS)\\n"',
+    `ports=$(kubectl --request-timeout=20s -n "$namespace" get pods -o=custom-columns='POD:.metadata.name,CONTAINER:.spec.containers[*].name,PORTS:.spec.containers[*].ports[*].containerPort')`,
+    `printf "%s\\n" "$ports" | awk -v prefix="$prefix" 'NR == 1 || index($1, prefix) == 1'`,
+    'printf "\\nService ports (matching service name)\\n"',
+    `services=$(kubectl --request-timeout=20s -n "$namespace" get services -o=custom-columns='SERVICE:.metadata.name,TYPE:.spec.type,PORT:.spec.ports[*].port,TARGET:.spec.ports[*].targetPort,NODEPORT:.spec.ports[*].nodePort')`,
+    `printf "%s\\n" "$services" | awk -v prefix="$prefix" 'NR == 1 || index($1, prefix) == 1'`,
+    'printf "\\nEndpoints (matching service name)\\n"',
+    'endpoints=$(kubectl --request-timeout=20s -n "$namespace" get endpoints -o wide)',
+    `printf "%s\\n" "$endpoints" | awk -v prefix="$prefix" 'NR == 1 || index($1, prefix) == 1'`,
+    'printf "\\nContainer ports are declared ports; service output includes target exposure. No port forwarding was started.\\n"',
+  ].join('\n');
 }

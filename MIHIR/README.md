@@ -65,3 +65,34 @@ npm run build
 
 ### Exporting a Readable Task Report
 - Open any task and click **Export Report (.md)** in the top-right header to download a clean Markdown engineering report suitable for pull requests, post-mortems, or team handoffs.
+
+## Hosted cloud database and workspace unlock
+
+The app now checks the workspace password on the server and uses an HTTP-only, SameSite session cookie for up to 12 hours. The requested initial password is configured as a server-side digest. It is not included in the browser bundle. The password protects workspace API reads, writes, backups and attachment downloads. The local terminal runner retains its separate pairing token and hidden interactive sudo prompt. The workspace password is never supplied to sudo.
+
+Vercel no longer uses temporary in-memory SQLite. Create a libSQL-compatible database in your Turso account, then add these **server-side** variables to the existing Vercel project before deploying this change:
+
+| Variable | Value |
+| --- | --- |
+| `TURSO_DATABASE_URL` | Database connection URL from Turso (`libsql://…` or HTTPS) |
+| `TURSO_AUTH_TOKEN` | Database read/write token from Turso |
+| `WORKSPACE_SESSION_SECRET` | Random value of at least 32 characters, generated once and shared by all instances |
+| `WORKSPACE_PASSWORD_SHA256` | Optional SHA-256 digest if you want to override the initial password |
+
+Generate the session secret locally with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`. Save it directly in Vercel's environment settings. Keep database tokens and the session secret out of browser code, screenshots and Git. Configure separate databases for Preview and Production if both environments are used. Rebuild/redeploy the frontend and API together after adding the variables. Missing database configuration returns an explicit 503; it never reports temporary memory as persistent storage. Missing or short hosted session secrets prevent login.
+
+After unlocking, check **Settings** or **Scripts** for the database status, backed by `GET /api/health/database`. Successful status means a real SQL query completed against the selected database. Live cloud activation still requires your account configuration; local tests cannot verify a remote database that has not been provisioned. See [Turso's SDK reference](https://docs.turso.tech/sdk/ts/reference) and [Vercel environment settings](https://vercel.com/docs/environment-variables).
+
+Local installs retain `MIHIR/data/mihir_workspace.sqlite`. `MIHIR_DATA_DIR` and `MIHIR_UPLOADS_DIR` override their directories. Only set `MIHIR_USE_CLOUD_DB=true` locally if you intend to use the same cloud records; there is no automatic merge between local SQLite and the remote database. To migrate existing data, export a complete backup from the local app's Settings, unlock the deployed app, and restore that backup there using the desired duplicate policy. Uploaded file content is stored in the persistent database and downloaded through authenticated `/api/attachments/…` routes. Old uploaded files are included by the existing backup exporter. Backup coverage remains tasks, projects, repositories, time entries, work notes, activity, settings and referenced attachments; daily focus and AI chat history are not included in that existing format.
+
+Google sign-in remains optional summary sync and is separate from the full workspace database. A new cloud database starts without illustrative tasks. Tasks and uploads are durable after the cloud connection is configured. Scripts, machine paths and terminal output remain on your computer.
+
+The local browser-free CLI accepts `MIHIR_WORKSPACE_PASSWORD` as an environment variable and keeps its session only in memory. Its loopback-only restriction is unchanged. Login throttling is per process; use Vercel's firewall rate limits for a shared deployment-wide limit if needed.
+
+### Ray pods and ports
+
+**Scripts → Ray job · Pods & ports → Inspect ports** exports the configured kubeconfig, lists matching pods, displays declared container ports, service/target/node ports and endpoints. Defaults use `/home/mihir-rathod/TEMP/k8s-readonly-user-raylife`, namespace `default`, and prefix `ray-job-service`. The action does not modify Kubernetes or start port forwarding. Service and endpoint queries require read permissions in addition to pod access. Kubernetes may warn that the legacy Endpoints API is deprecated; its output remains visible in the terminal.
+
+Use the shortcut's settings button to change the base directory, namespace, prefix or **Run as root using sudo**. The output prints the real working directory. Sudo asks for your operating-system password in the web terminal; there is no need to run the entire app as root or use an interactive `sudo su` shell. Live log shortcuts remain available for job, hub and controller services, with up to three non-root sessions.
+
+Verification commands: `npm run lint`, `npm run build`, `npm run test:auth`, `npm run test:database`, `npm run test:serverless`, `npm run test:scripts`, `npm run test:terminal-runner`, and `npm run test:workspace-client`.

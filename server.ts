@@ -1,3 +1,4 @@
+import { createWorkspaceAuth } from './MIHIR/server/workspaceAuth.js';
 import 'dotenv/config';
 import express from 'express';
 import path from 'node:path';
@@ -9,6 +10,11 @@ const app = express();
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+const workspaceAuth = createWorkspaceAuth();
+app.use('/api/auth', workspaceAuth.router);
+app.use('/api', workspaceAuth.requireSession);
+app.use('/uploads', workspaceAuth.requireSession);
 
 // Serve persistent uploaded files from MIHIR/uploads
 if (!IS_VERCEL) {

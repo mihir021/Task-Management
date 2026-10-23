@@ -22,6 +22,7 @@ export interface ScriptDefinition {
 }
 
 export interface KubernetesLogSettings {
+  action?: 'logs' | 'inspect';
   kubeconfig: string;
   namespace: string;
   podPrefix: string;

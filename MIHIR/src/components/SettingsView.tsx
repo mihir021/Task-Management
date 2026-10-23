@@ -1,3 +1,4 @@
+import { DatabaseStatus } from './DatabaseStatus';
 import React, { useRef, useState } from 'react';
 import {
   Sun,
@@ -334,6 +335,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           </div>
 
+          <DatabaseStatus />
           {/* Documented Database & Uploads Locations */}
           <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2 text-xs">
             <div className="font-semibold text-slate-800 dark:text-slate-200">
@@ -341,7 +343,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
             <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-1.5 font-mono text-[11px]">
               <div className="flex items-center justify-between gap-2">
-                <span className="truncate">SQLite DB: {storageInfo.databasePath}</span>
+                <span className="truncate">Database: {storageInfo.databasePath}</span>
                 <button
                   type="button"
                   onClick={() => handleCopy('db', storageInfo.databasePath)}
@@ -351,7 +353,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </button>
               </div>
               <div className="flex items-center justify-between gap-2">
-                <span className="truncate">Uploads Dir: {storageInfo.uploadsPath}</span>
+                <span className="truncate">Attachments: {storageInfo.databasePath.startsWith('cloud:') ? 'Cloud database' : storageInfo.uploadsPath}</span>
                 <button
                   type="button"
                   onClick={() => handleCopy('up', storageInfo.uploadsPath)}

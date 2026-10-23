@@ -11,7 +11,6 @@ import {
   collection,
   deleteDoc,
   doc,
-  getDocFromServer,
   getDocs,
   getFirestore,
   onSnapshot,
@@ -84,18 +83,6 @@ export function handleFirestoreError(
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
-
-// Validate connection on boot as required by firebase-integration-rpc
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration.');
-    }
-  }
-}
-testConnection();
 
 // Sanitize IDs to strictly match ^[a-zA-Z0-9_\-]+$ and maxLength 128
 export function sanitizeValidId(raw: string, fallback = 'item_1'): string {

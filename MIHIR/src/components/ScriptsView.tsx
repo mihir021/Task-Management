@@ -1,6 +1,7 @@
+import { DatabaseStatus } from './DatabaseStatus';
 import { scriptRequest, LOCAL_RUNNER_URL, RUNNER_TOKEN_KEY, isLocalWorkspace } from '../lib/scriptTransport';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Terminal, Play, Save, Plus, RefreshCw, ShieldCheck, FileCode2, PanelsTopLeft, Settings2 } from 'lucide-react';
+import { Terminal, Play, Save, Plus, RefreshCw, ShieldCheck, FileCode2, PanelsTopLeft, Settings2, Radio, Network, FolderOpen } from 'lucide-react';
 import type { ScriptDefinition, ScriptRun } from '../types/scripts';
 import { KubernetesScriptFields } from './KubernetesScriptFields';
 import { RunOutputWindow, RunBadge } from './RunOutputWindow';
@@ -106,7 +107,7 @@ export function ScriptsView() {
   }
   function custom() { patch({ mode: 'custom', customBody: draft?.customBody || preview || 'pwd\nprintf "Custom script ready\\n"\n' }); }
   function kubernetes() {
-    patch({ mode: 'kubernetes', runAsRoot: false, kubernetes: draft?.kubernetes || {
+    patch({ mode: 'kubernetes', runAsRoot: draft?.runAsRoot || false, kubernetes: draft?.kubernetes || {
       kubeconfig: `${data?.home || '/home/mihir-rathod'}/TEMP/k8s-readonly-user-raylife`, namespace: 'default',
       podPrefix: 'ray-job-service', container: '', filter: 'errors', pattern: 'ERROR', since: '10m', tail: 200,
       follow: true, reconnect: true,
@@ -120,10 +121,10 @@ export function ScriptsView() {
     } catch (problem: any) { setError(problem.message); }
     finally { setBusy(false); }
   }
-  async function start() {
-    if (!draft) return; setBusy(true); setError(''); setNotice('');
+  async function start(script: ScriptDefinition | null = draft) {
+    if (!script) return; setBusy(true); setError(''); setNotice('');
     try {
-      const value = await api<{ run: ScriptRun }>('/runs', 'POST', { script: draft });
+      const value = await api<{ run: ScriptRun }>('/runs', 'POST', { script });
       const runs = [value.run, ...(data?.runs || [])];
       updateRun(value.run);
       setOpenIds(previous => {
@@ -143,14 +144,15 @@ export function ScriptsView() {
     } catch (problem: any) { setError(problem.message); }
   }
   function prepareMonitor() {
-    const template = data?.scripts.find(item => item.mode === 'kubernetes');
+    const template = data?.scripts.find(item => item.mode === 'kubernetes' && item.kubernetes?.action !== 'inspect');
     const settings = template?.kubernetes || draft?.kubernetes;
     if (!settings) { setEditorOpen(true); return; }
     setDraft({ ...(template || draft!), id: crypto.randomUUID(), name: 'New application log monitor', mode: 'kubernetes', runAsRoot: false,
-      kubernetes: { ...settings, podPrefix: '' } });
+      kubernetes: { ...settings, action: 'logs', podPrefix: '' } });
     setEditorOpen(true); setNotice('Enter the service pod prefix, then run it in a new window.');
     setTimeout(() => editorNode.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
   }
+  const launchers = data?.scripts.filter(item => ['kubernetes-ray-job-ports', 'kubernetes-ray-job-logs', 'kubernetes-ray-hub-logs', 'kubernetes-ray-controller-logs'].includes(item.id)) || [];
   const activeRuns = data?.runs.filter(item => item.status === 'Running') || [];
   const exclusiveDraft = draft?.runAsRoot || draft?.mode === 'steps';
   const blockReason = activeRuns.length >= 3 ? 'Three sessions are running. Stop one to start another.'
@@ -160,14 +162,31 @@ export function ScriptsView() {
   const panel = 'rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900';
   const inputClass = 'w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm';
   return <div className="space-y-5">
-    <div className="flex flex-wrap justify-between items-start gap-3"><div><h1 className="text-2xl font-bold flex items-center gap-2"><Terminal className="text-indigo-500" />Scripts</h1><p className="mt-1 text-sm text-slate-500">Run your Ray workflow locally, with live terminal output and step-by-step status.</p></div>
-      <button onClick={() => load()} className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm flex gap-2 items-center"><RefreshCw className="w-4 h-4" />Refresh</button></div>
+    <header className="rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white p-6 sm:p-8 overflow-hidden">
+      <div className="flex flex-wrap justify-between items-start gap-5"><div><p className="text-[10px] uppercase tracking-[0.22em] text-indigo-300 font-semibold mb-3">Ray operations</p><h1 className="text-3xl font-semibold flex items-center gap-3"><Terminal className="text-indigo-400" />Scripts dashboard</h1><p className="mt-3 text-sm text-slate-300 max-w-xl">Inspect service ports, stream application logs, and run your local workflows with live output.</p></div>
+      <button onClick={() => load()} className="rounded-lg border border-slate-600 hover:bg-white/10 px-3 py-2 text-xs flex gap-2 items-center"><RefreshCw className="w-4 h-4" />Refresh</button></div>
+      <div className="flex flex-wrap items-center gap-x-8 gap-y-3 mt-7 pt-5 border-t border-white/10 text-xs"><span className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${data ? 'bg-emerald-400' : 'bg-amber-400'}`} />{data ? 'Local runner connected' : 'Connect your local runner'}</span><span className="text-slate-300">{runningCount} / 3 sessions running</span><span className="text-slate-300">{data?.scripts.length || 0} saved workflows</span><span className="text-slate-300">{windows.length} output windows</span>{draft && <span className="flex items-center gap-2 text-slate-400 font-mono break-all"><FolderOpen size={14} />{draft.cwd}</span>}</div>
+    </header>
+    <DatabaseStatus />
     {hosted && <section aria-label="Local terminal connection" className={`${panel} p-5 space-y-3`}>
       <div className="flex justify-between gap-3"><div><h2 className="font-semibold">{data ? 'Connected to your local terminal' : 'Connect local terminal'}</h2><p className="text-xs text-slate-500 mt-1">Commands execute on this computer. Terminal view shows the raw process output; Log table provides a structured view.</p></div>{data && <button onClick={disconnectRunner} className="text-xs text-slate-500 underline">Disconnect</button>}</div>
       {!data && <><p className="text-sm">Start the runner in your system terminal and keep it open:</p><pre className="rounded-lg bg-slate-950 text-slate-100 p-3 text-xs overflow-x-auto">{'cd /home/mihir-rathod/antigravity/MIHIR-Workspace\n./scripts/start-terminal-runner.sh'}</pre>
       <form onSubmit={connectRunner} className="flex flex-wrap gap-2"><label className="grow text-xs">Pairing token<input type="password" autoComplete="off" spellCheck={false} aria-label="Local runner pairing token" className={`${inputClass} mt-1 font-mono`} value={pairing} onChange={event => setPairing(event.target.value)} placeholder="Paste the token printed by the runner" /></label><button disabled={connecting} className="self-end rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm disabled:opacity-50">{connecting ? 'Connecting…' : 'Connect local terminal'}</button></form><p className="text-xs text-slate-500">The connection stays on your computer at 127.0.0.1:43123. If asked, allow this website to access your local network. The token is remembered only in this browser tab. Restarting the runner requires pairing again.</p></>}
     </section>}
     {error && <p role="alert" className="rounded-xl bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300 p-4 text-sm">{error}</p>}
+    <section aria-label="Quick launch services" className="space-y-3">
+      <div className="flex items-center justify-between"><div><h2 className="font-semibold">Service shortcuts</h2><p className="text-xs text-slate-500 mt-1">Choose a workflow to open its output. Settings let you change namespace, paths, or sudo.</p></div></div>
+      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">{(launchers.length ? launchers : [
+        { id: 'kubernetes-ray-job-ports', name: 'Ray job · Pods & ports', description: 'Discover pods and inspect service ports' },
+        { id: 'kubernetes-ray-job-logs', name: 'Ray job · Live logs', description: 'Follow ray-job-service output' },
+        { id: 'kubernetes-ray-hub-logs', name: 'Ray hub · Live logs', description: 'Follow ray-hub-service output' },
+        { id: 'kubernetes-ray-controller-logs', name: 'Ray controller · Live logs', description: 'Follow ray-controller-service output' },
+      ]).map(item => <div key={item.id} className={`${panel} p-4 flex flex-col gap-3`}>
+        <div className="flex items-start justify-between"><span className="rounded-lg bg-indigo-50 dark:bg-indigo-950 p-2 text-indigo-500">{item.id.endsWith('ports') ? <Network size={18} /> : <Radio size={18} />}</span><span className="text-[10px] rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-1 text-slate-500">Read only</span></div>
+        <h3 className="font-medium text-sm">{item.name.replace('Kubernetes · ', '').replace('-service logs', ' · Live logs')}</h3><p className="text-xs text-slate-500 flex-1">{'kubernetes' in item && item.kubernetes ? item.kubernetes.action === 'inspect' ? 'Pods, container ports, service ports and endpoints.' : `Live logs from ${item.kubernetes.podPrefix} in ${item.kubernetes.namespace}.` : item.description}</p>
+        <div className="flex gap-2"><button disabled={!data || busy || activeRuns.length >= 3 || activeRuns.some(run => run.exclusive)} onClick={() => { if ('cwd' in item) void start(item as ScriptDefinition); }} className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white px-3 py-2 text-xs"><Play size={13} />{item.id.endsWith('ports') ? 'Inspect ports' : 'Start logs'}</button><button aria-label={`Settings for ${item.name}`} disabled={!data} onClick={() => { if ('cwd' in item) { setDraft(item as ScriptDefinition); setEditorOpen(true); setTimeout(() => editorNode.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0); } }} className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500"><Settings2 size={15} /></button></div>
+      </div>)}</div>
+    </section>
     <section ref={workspaceNode} aria-label="Output workspace" className="space-y-4 scroll-mt-20">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div><h2 className="font-semibold flex items-center gap-2"><PanelsTopLeft className="w-4 h-4 text-indigo-500" />Output workspace <span className="text-xs font-normal text-slate-500">{runningCount}/3 running · {windows.length} windows open</span></h2><p className="text-xs text-slate-500 mt-1">Independent outputs for each service. Expand a window for the full table.</p></div>
@@ -179,7 +198,7 @@ export function ScriptsView() {
           <RunOutputWindow apiBase={apiBase} initialRun={item} token={token} compact={windows.length > 1 && !focusedId} expanded={focusedId === item.id} index={index + 1} onUpdate={updateRun}
             onExpand={() => setFocusedId(previous => previous === item.id ? null : item.id)} onClose={() => { setOpenIds(previous => previous.filter(id => id !== item.id)); if (focusedId === item.id) setFocusedId(null); }} />
         </div>)}
-        {!focusedId && windows.length < 3 && <button disabled={!data} onClick={prepareMonitor} className="rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 text-slate-500 min-h-44 flex flex-col items-center justify-center gap-2 hover:border-indigo-400 hover:text-indigo-600 p-6"><Plus className="w-6 h-6" /><span className="text-sm font-medium">{windows.length ? `Add service window ${windows.length + 1}` : 'Start your first service monitor'}</span><span className="text-xs">Kubernetes logs or custom application output</span></button>}
+        {!focusedId && windows.length < 3 && <button disabled={!data} onClick={prepareMonitor} className="rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 text-slate-500 min-h-32 flex flex-col items-center justify-center gap-2 hover:border-indigo-400 hover:text-indigo-600 p-6"><Plus className="w-6 h-6" /><span className="text-sm font-medium">{windows.length ? `Add service window ${windows.length + 1}` : 'Start your first service monitor'}</span><span className="text-xs">Open a service shortcut above or create a custom monitor</span></button>}
       </div>
     </section>
     <details ref={editorNode} open={editorOpen} onToggle={event => setEditorOpen(event.currentTarget.open)} className="scroll-mt-20">
@@ -198,9 +217,9 @@ export function ScriptsView() {
         {draft && <section className={`${panel} p-5 space-y-4`}>
           <div className="grid md:grid-cols-2 gap-3"><label className="text-xs font-medium space-y-1 block">Script name<input className={inputClass} value={draft.name} onChange={event => patch({ name: event.target.value })} /></label><label className="text-xs font-medium space-y-1 block">Base directory<input className={`${inputClass} font-mono`} value={draft.cwd} onChange={event => patch({ cwd: event.target.value })} /></label></div>
           {draft.mode !== 'kubernetes' && <div className="flex flex-wrap gap-2">{[['pull-run', 'Pull & run'], ['pull', 'Pull only'], ['start', 'Start only'], ['restart', 'Restart only']].map(([key, label]) => <button key={key} className="rounded-lg px-3 py-2 text-xs border border-indigo-200 dark:border-indigo-900 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950" onClick={() => quick(key)}>{label}</button>)}<button className="rounded-lg px-3 py-2 text-xs border border-slate-300 dark:border-slate-700" onClick={custom}>Custom Bash</button></div>}
-          {draft.mode !== 'kubernetes' && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={draft.runAsRoot} onChange={event => patch({ runAsRoot: event.target.checked })} /><ShieldCheck className="w-4 h-4 text-indigo-500" />Run as root using sudo</label>}
+          {<label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={draft.runAsRoot} onChange={event => patch({ runAsRoot: event.target.checked })} /><ShieldCheck className="w-4 h-4 text-indigo-500" />Run as root using sudo</label>}
           {draft.runAsRoot && <p className="text-xs text-slate-500">Sudo runs this script with root privileges. If prompted, click the terminal and type your password; it stays hidden and is not saved. Your existing HOME is preserved for ~/ray paths.</p>}
-          <div className="flex gap-3 text-sm border-b border-slate-200 dark:border-slate-800 pb-3"><button className={draft.mode === 'steps' ? 'font-semibold text-indigo-600' : 'text-slate-500'} onClick={() => patch({ mode: 'steps' })}>Choose steps</button><button className={draft.mode === 'kubernetes' ? 'font-semibold text-indigo-600' : 'text-slate-500'} onClick={kubernetes}>Kubernetes logs</button><button className={draft.mode === 'custom' ? 'font-semibold text-indigo-600' : 'text-slate-500'} onClick={custom}>Custom script</button></div>
+          <div className="flex gap-3 text-sm border-b border-slate-200 dark:border-slate-800 pb-3"><button className={draft.mode === 'steps' ? 'font-semibold text-indigo-600' : 'text-slate-500'} onClick={() => patch({ mode: 'steps' })}>Choose steps</button><button className={draft.mode === 'kubernetes' ? 'font-semibold text-indigo-600' : 'text-slate-500'} onClick={kubernetes}>Kubernetes</button><button className={draft.mode === 'custom' ? 'font-semibold text-indigo-600' : 'text-slate-500'} onClick={custom}>Custom script</button></div>
           {draft.mode === 'steps' ? <>
             <div className="grid sm:grid-cols-2 gap-3 text-sm">{[['pull', 'Pull recent images · pull.sh'], ['up', 'Bring up stack · up.sh'], ['stopAll', 'Stop ALL running Docker containers']].map(([key, label]) => <label key={key} className="flex gap-2 items-center"><input type="checkbox" checked={Boolean(draft[key as keyof ScriptDefinition])} onChange={event => patch({ [key]: event.target.checked })} />{label}</label>)}
               <label className="flex items-center gap-2">Then<select aria-label="Container action" className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 p-2 text-sm" value={draft.finalAction} onChange={event => patch({ finalAction: event.target.value as ScriptDefinition['finalAction'] })}><option value="start">Start selected containers</option><option value="restart">Restart selected containers</option><option value="none">No start / restart</option></select></label>
@@ -210,7 +229,7 @@ export function ScriptsView() {
             <details><summary className="text-sm cursor-pointer font-medium">Containers / services · {draft.containers.length} selected</summary><div className="flex gap-3 mt-3 text-xs"><button onClick={() => patch({ containers: data?.containers || [] })} className="text-indigo-500">Select all</button><button onClick={() => patch({ containers: [] })} className="text-slate-500">Clear</button></div><div className="grid md:grid-cols-2 gap-2 mt-3">{data?.containers.map(name => <label key={name} className="text-xs flex gap-2 items-center font-mono"><input type="checkbox" checked={draft.containers.includes(name)} onChange={event => patch({ containers: event.target.checked ? [...draft.containers, name] : draft.containers.filter(item => item !== name) })} />{name}</label>)}</div></details>
           </> : draft.mode === 'kubernetes' && draft.kubernetes ? <KubernetesScriptFields value={draft.kubernetes} onChange={value => patch({ kubernetes: value })} /> : <label className="block text-xs font-medium">Bash commands<textarea spellCheck={false} aria-label="Custom Bash commands" className="mt-2 w-full h-64 rounded-xl bg-slate-950 text-slate-200 p-4 font-mono text-xs leading-5 border border-slate-700" value={draft.customBody} onChange={event => patch({ customBody: event.target.value })} /><span className="block text-slate-500 mt-1">Commands run locally in the base directory with the privileges selected above.</span></label>}
           <details><summary className="font-medium text-sm cursor-pointer">Preview exact Bash script</summary>{previewError ? <p className="text-rose-500 text-xs mt-2">{previewError}</p> : <pre className="bg-slate-950 text-slate-300 text-xs p-4 rounded-xl mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-words">{preview}</pre>}</details>
-          <div className="flex flex-wrap gap-3 items-center"><button disabled={busy || Boolean(previewError)} onClick={save} className="rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-sm flex items-center gap-2 disabled:opacity-50"><Save className="w-4 h-4" />Save script</button><button disabled={busy || Boolean(blockReason) || Boolean(previewError) || !data?.terminalAvailable} onClick={start} className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm flex items-center gap-2 disabled:opacity-50"><Play className="w-4 h-4" />Run in new window</button>{notice && <span role="status" className="text-xs text-emerald-600">{notice}</span>}{previewError && <span className="text-xs text-rose-500">{previewError}</span>}{blockReason && <span className="text-xs text-amber-600">{blockReason}</span>}</div>
+          <div className="flex flex-wrap gap-3 items-center"><button disabled={busy || Boolean(previewError)} onClick={save} className="rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-sm flex items-center gap-2 disabled:opacity-50"><Save className="w-4 h-4" />Save script</button><button disabled={busy || Boolean(blockReason) || Boolean(previewError) || !data?.terminalAvailable} onClick={() => start()} className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm flex items-center gap-2 disabled:opacity-50"><Play className="w-4 h-4" />Run in new window</button>{notice && <span role="status" className="text-xs text-emerald-600">{notice}</span>}{previewError && <span className="text-xs text-rose-500">{previewError}</span>}{blockReason && <span className="text-xs text-amber-600">{blockReason}</span>}</div>
         </section>}
       </div>
     </div>

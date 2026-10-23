@@ -11,7 +11,7 @@ export function scriptHeaders(token: string, json = false): Record<string, strin
 export async function scriptRequest<T>(base: string, token: string, route: string, method = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(base + '/api/scripts' + route, { ...loopbackOptions(base), method, signal: signal || AbortSignal.timeout(10000), credentials: 'omit',
+    response = await fetch(base + '/api/scripts' + route, { ...loopbackOptions(base), method, signal: signal || AbortSignal.timeout(10000), credentials: base ? 'omit' : 'same-origin',
       headers: scriptHeaders(token, body !== undefined), body: body === undefined ? undefined : JSON.stringify(body) });
   } catch (error) {
     if (signal?.aborted) throw error;
@@ -36,7 +36,7 @@ export function followScriptEvents(base: string, token: () => string, id: string
     while (!signal.aborted) {
       try {
         const response = await fetch(`${base}/api/scripts/runs/${encodeURIComponent(id)}/events`, {
-          ...loopbackOptions(base), signal, credentials: 'omit', headers: scriptHeaders(token()),
+          ...loopbackOptions(base), signal, credentials: base ? 'omit' : 'same-origin', headers: scriptHeaders(token()),
         });
         if (!response.ok || !response.headers.get('content-type')?.includes('text/event-stream') || !response.body) {
           throw new Error(response.status === 403 ? 'Local runner pairing expired. Reconnect with its current token.' : 'Terminal stream unavailable. Check the local runner.');
@@ -74,7 +74,7 @@ export function followScriptEvents(base: string, token: () => string, id: string
 }
 
 export async function downloadScriptOutput(base: string, token: string, id: string) {
-  const response = await fetch(`${base}/api/scripts/runs/${encodeURIComponent(id)}/output`, { ...loopbackOptions(base), credentials: 'omit', headers: scriptHeaders(token) });
+  const response = await fetch(`${base}/api/scripts/runs/${encodeURIComponent(id)}/output`, { ...loopbackOptions(base), credentials: base ? 'omit' : 'same-origin', headers: scriptHeaders(token) });
   if (!response.ok || !response.headers.get('content-type')?.includes('text/plain')) throw new Error('Unable to download terminal output. Check the local runner connection.');
   const url = URL.createObjectURL(await response.blob());
   const link = document.createElement('a'); link.href = url; link.download = `terminal-${id}.txt`; link.click();

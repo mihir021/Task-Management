@@ -7,7 +7,7 @@ import type { MonitorMapping } from '../src/types/monitor';
 
 export function createMonitorRouter({ dataDir, getRepositories }: {
   dataDir: string;
-  getRepositories: () => Array<{ id: string; name: string }>;
+  getRepositories: () => Array<{ id: string; name: string }> | Promise<Array<{ id: string; name: string }>>;
 }) {
 const monitorRouter = express.Router();
 const configFile = path.join(dataDir, 'monitor-config.json');
@@ -27,32 +27,32 @@ monitorRouter.use((req, res, next) => {
   next();
 });
 
-function mappings(): MonitorMapping[] {
+async function mappings(): Promise<MonitorMapping[]> {
   if (fs.existsSync(configFile)) {
     const data = JSON.parse(fs.readFileSync(configFile, 'utf8'));
     if (!Array.isArray(data)) throw new Error('Invalid monitor configuration file.');
     return data;
   }
-  return getRepositories().filter(repo => ['raydashboard', 'raydashboard-power-btn-fix'].includes(repo.name))
+  return (await getRepositories()).filter(repo => ['raydashboard', 'raydashboard-power-btn-fix'].includes(repo.name))
     .map(repo => ({ repositoryId: repo.id, jobPath: 'raydashboard' }));
 }
 
-function config() {
-  return { jenkinsUrl: jenkinsBaseUrl().href, credentialsConfigured: Boolean(process.env.JENKINS_USER && process.env.JENKINS_API_TOKEN), mappings: mappings() };
+async function config() {
+  return { jenkinsUrl: jenkinsBaseUrl().href, credentialsConfigured: Boolean(process.env.JENKINS_USER && process.env.JENKINS_API_TOKEN), mappings: await mappings() };
 }
 
 function fail(res: express.Response, error: unknown) {
   res.status(error instanceof JenkinsError ? error.status : 500).json({ error: error instanceof JenkinsError ? error.message : 'Unable to read or save Monitor configuration.' });
 }
 
-monitorRouter.get('/config', (_req, res) => {
-  try { res.json(config()); } catch (error) { fail(res, error); }
+monitorRouter.get('/config', async (_req, res) => {
+  try { res.json(await config()); } catch (error) { fail(res, error); }
 });
 
-monitorRouter.put('/config', (req, res) => {
+monitorRouter.put('/config', async (req, res) => {
   try {
     const incoming = req.body.mappings;
-    const repositories = getRepositories();
+    const repositories = await getRepositories();
     if (!Array.isArray(incoming) || incoming.length > repositories.length) throw new JenkinsError('Invalid repository mappings.', 400);
     const ids = new Set<string>();
     const clean = incoming.map((item: MonitorMapping) => {
@@ -64,22 +64,22 @@ monitorRouter.put('/config', (req, res) => {
     const temp = configFile + '.' + randomUUID() + '.tmp';
     fs.writeFileSync(temp, JSON.stringify(clean, null, 2), { mode: 0o600 });
     fs.renameSync(temp, configFile);
-    res.json(config());
+    res.json(await config());
   } catch (error) { fail(res, error); }
 });
 
-function mappedJob(repositoryId: string): string {
-  const mapping = mappings().find(item => item.repositoryId === repositoryId);
+async function mappedJob(repositoryId: string): Promise<string> {
+  const mapping = (await mappings()).find(item => item.repositoryId === repositoryId);
   if (!mapping) throw new JenkinsError('Configure a Jenkins job for this repository first.', 404);
   return mapping.jobPath;
 }
 
 monitorRouter.get('/repositories/:id/builds', async (req, res) => {
-  try { res.json(await getJob(mappedJob(req.params.id))); } catch (error) { fail(res, error); }
+  try { res.json(await getJob(await mappedJob(req.params.id))); } catch (error) { fail(res, error); }
 });
 
 monitorRouter.get('/repositories/:id/builds/:build/log', async (req, res) => {
-  try { res.json(await getBuildLog(mappedJob(req.params.id), Number(req.params.build), Number(req.query.start ?? 0))); } catch (error) { fail(res, error); }
+  try { res.json(await getBuildLog(await mappedJob(req.params.id), Number(req.params.build), Number(req.query.start ?? 0))); } catch (error) { fail(res, error); }
 });
 return monitorRouter;
 }

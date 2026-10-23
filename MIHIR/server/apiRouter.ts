@@ -3,6 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   createCompleteBackupBundle,
+  getDatabaseHealth,
+  getUploadedFile,
+  saveUploadedFile,
+  databaseConfigured,
+  databaseInitializationFailed,
   deleteProjectById,
   deleteRepositoryById,
   deleteTaskById,
@@ -46,6 +51,17 @@ import { DuplicatePolicy, TaskAttachment, TaskRecord, TaskRepository, TaskStatus
 
 export const apiRouter = express.Router();
 
+apiRouter.get('/health/database', async (_req, res) => {
+  const health = await getDatabaseHealth();
+  res.status(health.connected ? 200 : 503).json(health);
+});
+apiRouter.use((_req, res, next) => {
+  if (!databaseConfigured || databaseInitializationFailed) {
+    res.status(503).json({ error: 'Persistent database is unavailable. Check database setup in Vercel.', code: 'DATABASE_UNAVAILABLE' }); return;
+  }
+  next();
+});
+
 const ALLOWED_MIME_TYPES = new Set([
   'image/png',
   'image/jpeg',
@@ -58,15 +74,15 @@ const ALLOWED_MIME_TYPES = new Set([
   'application/json',
 ]);
 
-apiRouter.get('/workspace', (_req, res) => {
+apiRouter.get('/workspace', async (_req, res) => {
   try {
-    res.json(getFullWorkspaceState());
+    res.json((await getFullWorkspaceState()));
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to load workspace state' });
   }
 });
 
-apiRouter.post('/tasks', (req, res) => {
+apiRouter.post('/tasks', async (req, res) => {
   try {
     const body = req.body as Partial<TaskRecord> & {
       selectedRepoConfigs?: Array<{
@@ -84,14 +100,14 @@ apiRouter.post('/tasks', (req, res) => {
     }
 
     const now = new Date().toISOString();
-    const existingTasks = getFullWorkspaceState().tasks;
+    const existingTasks = (await getFullWorkspaceState()).tasks;
     const requestedCode = body.taskCode?.trim();
     const codeCollision = requestedCode
       ? existingTasks.some((t) => t.taskCode.toUpperCase() === requestedCode.toUpperCase())
       : false;
-    const taskCode = !requestedCode || codeCollision ? getNextTaskCode() : requestedCode;
+    const taskCode = !requestedCode || codeCollision ? (await getNextTaskCode()) : requestedCode;
     const taskId = body.id || `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const allRepos = getAllRepositories();
+    const allRepos = (await getAllRepositories());
 
     let repositories: TaskRepository[] = [];
     if (Array.isArray(body.repositories) && body.repositories.length > 0) {
@@ -171,24 +187,24 @@ apiRouter.post('/tasks', (req, res) => {
       tests: Array.isArray(body.tests) ? body.tests : [],
     };
 
-    const saved = upsertTask(newTask);
-    logActivity({
+    const saved = (await upsertTask(newTask));
+    (await logActivity({
       taskId: saved.id,
       taskCode: saved.taskCode,
       actionType: 'status',
       summary: `Created task ${saved.taskCode}: ${saved.title}`,
       details: `Project: ${saved.projectName} · Priority: ${saved.priority} · Status: ${saved.status}`,
-    });
+    }));
 
-    res.status(201).json({ task: saved, state: getFullWorkspaceState() });
+    res.status(201).json({ task: saved, state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to create task' });
   }
 });
 
-apiRouter.put('/tasks/:id', (req, res) => {
+apiRouter.put('/tasks/:id', async (req, res) => {
   try {
-    const existing = getTaskById(req.params.id);
+    const existing = (await getTaskById(req.params.id));
     if (!existing) {
       res.status(404).json({ error: 'Task not found' });
       return;
@@ -217,33 +233,33 @@ apiRouter.put('/tasks/:id', (req, res) => {
       updatedAt: now,
     };
 
-    const saved = upsertTask(merged);
+    const saved = (await upsertTask(merged));
 
     if (incoming._activityMessage) {
-      logActivity({
+      (await logActivity({
         taskId: saved.id,
         taskCode: saved.taskCode,
         actionType: incoming._activityType || 'note',
         summary: incoming._activityMessage,
         details: saved.title,
-      });
+      }));
     } else if (incoming.status && incoming.status !== existing.status) {
-      logActivity({
+      (await logActivity({
         taskId: saved.id,
         taskCode: saved.taskCode,
         actionType: 'status',
         summary: `Changed status of ${saved.taskCode} from "${existing.status}" to "${saved.status}"`,
         details: saved.title,
-      });
+      }));
     }
 
-    res.json({ task: saved, state: getFullWorkspaceState() });
+    res.json({ task: saved, state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to update task' });
   }
 });
 
-apiRouter.post('/tasks/reorder', (req, res) => {
+apiRouter.post('/tasks/reorder', async (req, res) => {
   try {
     const body = req.body as {
       orderedTaskIds?: string[];
@@ -256,28 +272,28 @@ apiRouter.post('/tasks/reorder', (req, res) => {
       return;
     }
 
-    const updatedTasks = reorderTasksInColumn(body.orderedTaskIds, body.statusUpdates);
+    const updatedTasks = (await reorderTasksInColumn(body.orderedTaskIds, body.statusUpdates));
 
     if (updatedTasks.length > 0) {
       const codes = updatedTasks.map((t) => t.taskCode).join(' → ');
-      logActivity({
+      (await logActivity({
         taskId: updatedTasks[0].id,
         taskCode: updatedTasks[0].taskCode,
         actionType: 'status',
         summary: `Reordered tasks in ${body.columnLabel || 'Board'}: ${codes}`,
         details: `Order saved: ${codes}`,
-      });
+      }));
     }
 
-    res.json({ tasks: updatedTasks, state: getFullWorkspaceState() });
+    res.json({ tasks: updatedTasks, state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to reorder tasks' });
   }
 });
 
-apiRouter.post('/tasks/:id/duplicate', (req, res) => {
+apiRouter.post('/tasks/:id/duplicate', async (req, res) => {
   try {
-    const existing = getTaskById(req.params.id);
+    const existing = (await getTaskById(req.params.id));
     if (!existing) {
       res.status(404).json({ error: 'Task not found' });
       return;
@@ -285,7 +301,7 @@ apiRouter.post('/tasks/:id/duplicate', (req, res) => {
 
     const now = new Date().toISOString();
     const newId = `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const newCode = getNextTaskCode();
+    const newCode = (await getNextTaskCode());
 
     const clonedRepos: TaskRepository[] = existing.repositories.map((r, idx) => {
       const repoLinkId = `${newId}-repo-${idx + 1}`;
@@ -325,45 +341,55 @@ apiRouter.post('/tasks/:id/duplicate', (req, res) => {
       repositories: clonedRepos,
     };
 
-    const saved = upsertTask(duplicated);
-    logActivity({
+    const saved = (await upsertTask(duplicated));
+    (await logActivity({
       taskId: saved.id,
       taskCode: saved.taskCode,
       actionType: 'status',
       summary: `Duplicated ${existing.taskCode} as ${saved.taskCode}`,
       details: saved.title,
-    });
+    }));
 
-    res.status(201).json({ task: saved, state: getFullWorkspaceState() });
+    res.status(201).json({ task: saved, state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to duplicate task' });
   }
 });
 
-apiRouter.delete('/tasks/:id', (req, res) => {
+apiRouter.delete('/tasks/:id', async (req, res) => {
   try {
-    const existing = getTaskById(req.params.id);
+    const existing = (await getTaskById(req.params.id));
     if (!existing) {
       res.status(404).json({ error: 'Task not found' });
       return;
     }
-    deleteTaskById(existing.id);
-    logActivity({
+    (await deleteTaskById(existing.id));
+    (await logActivity({
       taskId: null,
       taskCode: existing.taskCode,
       actionType: 'status',
       summary: `Deleted task ${existing.taskCode}: ${existing.title}`,
       details: 'Permanently removed task record',
-    });
-    res.json({ state: getFullWorkspaceState() });
+    }));
+    res.json({ state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to delete task' });
   }
 });
 
-apiRouter.post('/tasks/:id/attachments', (req, res) => {
+apiRouter.get('/attachments/:fileName', async (req, res) => {
   try {
-    const existing = getTaskById(req.params.id);
+    const file = await getUploadedFile(path.basename(req.params.fileName));
+    if (!file) { res.status(404).json({ error: 'Attachment not found' }); return; }
+    res.set('Content-Type', file.mime_type).set('X-Content-Type-Options', 'nosniff')
+      .set('Content-Security-Policy', "default-src 'none'; sandbox")
+      .send(Buffer.from(file.base64_data, 'base64'));
+  } catch { res.status(500).json({ error: 'Unable to load attachment' }); }
+});
+
+apiRouter.post('/tasks/:id/attachments', async (req, res) => {
+  try {
+    const existing = (await getTaskById(req.params.id));
     if (!existing) {
       res.status(404).json({ error: 'Task not found' });
       return;
@@ -386,7 +412,7 @@ apiRouter.post('/tasks/:id/attachments', (req, res) => {
       return;
     }
 
-    const settings = getSettings();
+    const settings = (await getSettings());
     const maxBytes = (settings.maxAttachmentSizeMB || 10) * 1024 * 1024;
     if (sizeBytes && sizeBytes > maxBytes) {
       res.status(400).json({
@@ -420,7 +446,8 @@ apiRouter.post('/tasks/:id/attachments', (req, res) => {
       return;
     }
 
-    // On Vercel, skip writing to filesystem (read-only); attachment metadata is still tracked
+    await saveUploadedFile(storedFileName, mimeType || 'image/png', buffer.toString('base64'));
+    // Local installations also retain the original upload files.
     if (!IS_VERCEL) {
       fs.writeFileSync(destPath, buffer);
     }
@@ -431,7 +458,7 @@ apiRouter.post('/tasks/:id/attachments', (req, res) => {
       originalName,
       mimeType: mimeType || 'image/png',
       sizeBytes: buffer.byteLength,
-      url: `/uploads/${storedFileName}`,
+      url: `/api/attachments/${storedFileName}`,
       category,
       caption: caption || originalName,
       notes,
@@ -440,28 +467,28 @@ apiRouter.post('/tasks/:id/attachments', (req, res) => {
       uploadedAt: new Date().toISOString(),
     };
 
-    const updatedTask = upsertTask({
+    const updatedTask = (await upsertTask({
       ...existing,
       attachments: [newAttachment, ...existing.attachments],
-    });
+    }));
 
-    logActivity({
+    (await logActivity({
       taskId: updatedTask.id,
       taskCode: updatedTask.taskCode,
       actionType: 'attachment',
       summary: `Uploaded ${category} screenshot "${newAttachment.caption}" on ${updatedTask.taskCode}`,
       details: originalName,
-    });
+    }));
 
-    res.status(201).json({ attachment: newAttachment, task: updatedTask, state: getFullWorkspaceState() });
+    res.status(201).json({ attachment: newAttachment, task: updatedTask, state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to upload attachment' });
   }
 });
 
-apiRouter.put('/tasks/:id/attachments/:attId', (req, res) => {
+apiRouter.put('/tasks/:id/attachments/:attId', async (req, res) => {
   try {
-    const existing = getTaskById(req.params.id);
+    const existing = (await getTaskById(req.params.id));
     if (!existing) {
       res.status(404).json({ error: 'Task not found' });
       return;
@@ -480,70 +507,70 @@ apiRouter.put('/tasks/:id/attachments/:attId', (req, res) => {
           }
         : att
     );
-    const updatedTask = upsertTask({ ...existing, attachments });
-    res.json({ task: updatedTask, state: getFullWorkspaceState() });
+    const updatedTask = (await upsertTask({ ...existing, attachments }));
+    res.json({ task: updatedTask, state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to update attachment' });
   }
 });
 
-apiRouter.delete('/tasks/:id/attachments/:attId', (req, res) => {
+apiRouter.delete('/tasks/:id/attachments/:attId', async (req, res) => {
   try {
-    const existing = getTaskById(req.params.id);
+    const existing = (await getTaskById(req.params.id));
     if (!existing) {
       res.status(404).json({ error: 'Task not found' });
       return;
     }
     const target = existing.attachments.find((a) => a.id === req.params.attId);
     const attachments = existing.attachments.filter((a) => a.id !== req.params.attId);
-    const updatedTask = upsertTask({ ...existing, attachments });
+    const updatedTask = (await upsertTask({ ...existing, attachments }));
 
     if (target) {
-      logActivity({
+      (await logActivity({
         taskId: updatedTask.id,
         taskCode: updatedTask.taskCode,
         actionType: 'attachment',
         summary: `Removed attachment "${target.caption}" from ${updatedTask.taskCode}`,
         details: target.originalName,
-      });
+      }));
     }
 
-    res.json({ task: updatedTask, state: getFullWorkspaceState() });
+    res.json({ task: updatedTask, state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to delete attachment' });
   }
 });
 
-apiRouter.post('/projects', (req, res) => {
+apiRouter.post('/projects', async (req, res) => {
   try {
     const { id, name, description, leadName } = req.body;
     if (!name || !name.trim()) {
       res.status(400).json({ error: 'Project name is required.' });
       return;
     }
-    upsertProject({
+    (await upsertProject({
       id: id || `proj-${Date.now()}`,
       name: name.trim(),
       description: description || '',
       leadName: leadName || 'Mihir Rathod',
       createdAt: new Date().toISOString(),
-    });
-    res.json({ state: getFullWorkspaceState() });
+    }));
+    res.json({ state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to save project' });
   }
 });
 
-apiRouter.delete('/projects/:id', (req, res) => {
+apiRouter.delete('/projects/:id', async (req, res) => {
   try {
-    deleteProjectById(req.params.id);
-    res.json({ state: getFullWorkspaceState() });
+    (await deleteProjectById(req.params.id));
+    res.json({ state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to delete project' });
   }
 });
 
-apiRouter.post('/repositories', (req, res) => {
+apiRouter.post('/repositories', async (req, res) => {
   try {
     const body = req.body;
     if (!body.name || !body.name.trim()) {
@@ -552,7 +579,7 @@ apiRouter.post('/repositories', (req, res) => {
     }
     const cleanName = body.name.trim();
     const baseBranch = body.defaultBaseBranch?.trim() || 'development';
-    const savedRepo = upsertRepository({
+    const savedRepo = (await upsertRepository({
       id: body.id || `repo-${cleanName.toLowerCase().replace(/[^a-z0-9_-]/g, '-')}-${Date.now().toString(36).slice(-4)}`,
       projectId: body.projectId || 'proj-ray',
       projectName: body.projectName || 'Ray',
@@ -565,39 +592,39 @@ apiRouter.post('/repositories', (req, res) => {
       cloudTargetName: body.cloudTargetName || 'cloud-release',
       cloudTargetType: body.cloudTargetType || 'Branch',
       defaultWorkflowMode: body.defaultWorkflowMode || 'PR-Based',
-    });
-    res.json({ repository: savedRepo, state: getFullWorkspaceState() });
+    }));
+    res.json({ repository: savedRepo, state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to save repository' });
   }
 });
 
-apiRouter.delete('/repositories/:id', (req, res) => {
+apiRouter.delete('/repositories/:id', async (req, res) => {
   try {
-    deleteRepositoryById(req.params.id);
-    res.json({ state: getFullWorkspaceState() });
+    (await deleteRepositoryById(req.params.id));
+    res.json({ state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to delete repository' });
   }
 });
 
-apiRouter.post('/timer/start', (req, res) => {
+apiRouter.post('/timer/start', async (req, res) => {
   try {
     const { taskId, notes = '' } = req.body;
-    const task = getTaskById(taskId);
+    const task = (await getTaskById(taskId));
     if (!task) {
       res.status(404).json({ error: 'Task not found for timer' });
       return;
     }
 
-    const settings = getSettings();
+    const settings = (await getSettings());
     const now = new Date().toISOString();
 
     // If another timer was running, stop and record it first to prevent duplicate timers
     if (settings.activeTimer && settings.activeTimer.taskId !== task.id) {
       const prevStart = new Date(settings.activeTimer.startedAt).getTime();
       const elapsedMins = Math.max(1, Math.round((Date.now() - prevStart) / 60000));
-      upsertTimeEntry({
+      (await upsertTimeEntry({
         id: `te-${Date.now()}-prev`,
         taskId: settings.activeTimer.taskId,
         taskCode: settings.activeTimer.taskCode,
@@ -607,7 +634,7 @@ apiRouter.post('/timer/start', (req, res) => {
         durationMinutes: elapsedMins,
         notes: settings.activeTimer.notes || 'Auto-saved when switching task timer',
         isManual: false,
-      });
+      }));
     }
 
     settings.activeTimer = {
@@ -617,29 +644,29 @@ apiRouter.post('/timer/start', (req, res) => {
       startedAt: now,
       notes,
     };
-    saveSettings(settings);
+    (await saveSettings(settings));
 
     if (!task.startedAt) {
-      upsertTask({ ...task, startedAt: now, status: task.status === 'Todo' ? 'In Progress' : task.status });
+      (await upsertTask({ ...task, startedAt: now, status: task.status === 'Todo' ? 'In Progress' : task.status }));
     }
 
-    logActivity({
+    (await logActivity({
       taskId: task.id,
       taskCode: task.taskCode,
       actionType: 'timer',
       summary: `Started work timer on ${task.taskCode}`,
       details: notes || task.title,
-    });
+    }));
 
-    res.json({ state: getFullWorkspaceState() });
+    res.json({ state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to start timer' });
   }
 });
 
-apiRouter.post('/timer/stop', (req, res) => {
+apiRouter.post('/timer/stop', async (req, res) => {
   try {
-    const settings = getSettings();
+    const settings = (await getSettings());
     if (!settings.activeTimer) {
       res.status(400).json({ error: 'No active timer is currently running.' });
       return;
@@ -650,7 +677,7 @@ apiRouter.post('/timer/stop', (req, res) => {
     const startMs = new Date(settings.activeTimer.startedAt).getTime();
     const durationMinutes = Math.max(1, Math.round((Date.now() - startMs) / 60000));
 
-    const entry = upsertTimeEntry({
+    const entry = (await upsertTimeEntry({
       id: `te-${Date.now()}`,
       taskId: settings.activeTimer.taskId,
       taskCode: settings.activeTimer.taskCode,
@@ -660,36 +687,36 @@ apiRouter.post('/timer/stop', (req, res) => {
       durationMinutes,
       notes: notes !== undefined ? notes : settings.activeTimer.notes || 'Recorded timer session',
       isManual: false,
-    });
+    }));
 
-    logActivity({
+    (await logActivity({
       taskId: entry.taskId,
       taskCode: entry.taskCode,
       actionType: 'timer',
       summary: `Logged ${durationMinutes}m via timer on ${entry.taskCode}`,
       details: entry.notes,
-    });
+    }));
 
     settings.activeTimer = null;
-    saveSettings(settings);
+    (await saveSettings(settings));
 
-    res.json({ entry, state: getFullWorkspaceState() });
+    res.json({ entry, state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to stop timer' });
   }
 });
 
-apiRouter.post('/time-entries', (req, res) => {
+apiRouter.post('/time-entries', async (req, res) => {
   try {
     const { id, taskId, startedAt, endedAt, durationMinutes, notes, isManual = true } = req.body;
-    const task = getTaskById(taskId);
+    const task = (await getTaskById(taskId));
     const mins = Number(durationMinutes);
     if (!taskId || Number.isNaN(mins) || mins <= 0) {
       res.status(400).json({ error: 'Valid task and positive duration (minutes) are required.' });
       return;
     }
 
-    const entry = upsertTimeEntry({
+    const entry = (await upsertTimeEntry({
       id: id || `te-${Date.now()}`,
       taskId,
       taskCode: task?.taskCode || 'TASK',
@@ -699,26 +726,26 @@ apiRouter.post('/time-entries', (req, res) => {
       durationMinutes: Math.round(mins),
       notes: notes || '',
       isManual: Boolean(isManual),
-    });
+    }));
 
-    logActivity({
+    (await logActivity({
       taskId: entry.taskId,
       taskCode: entry.taskCode,
       actionType: 'timer',
       summary: `Logged ${entry.durationMinutes}m work session on ${entry.taskCode}`,
       details: entry.notes || 'Manual time entry',
-    });
+    }));
 
-    res.json({ entry, state: getFullWorkspaceState() });
+    res.json({ entry, state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to save time entry' });
   }
 });
 
-apiRouter.put('/time-entries/:id', (req, res) => {
+apiRouter.put('/time-entries/:id', async (req, res) => {
   try {
     const { taskId, taskCode, taskTitle, startedAt, endedAt, durationMinutes, notes, isManual } = req.body;
-    upsertTimeEntry({
+    (await upsertTimeEntry({
       id: req.params.id,
       taskId,
       taskCode,
@@ -728,31 +755,31 @@ apiRouter.put('/time-entries/:id', (req, res) => {
       durationMinutes: Number(durationMinutes) || 15,
       notes: notes || '',
       isManual: Boolean(isManual),
-    });
-    res.json({ state: getFullWorkspaceState() });
+    }));
+    res.json({ state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to update time entry' });
   }
 });
 
-apiRouter.delete('/time-entries/:id', (req, res) => {
+apiRouter.delete('/time-entries/:id', async (req, res) => {
   try {
-    deleteTimeEntryById(req.params.id);
-    res.json({ state: getFullWorkspaceState() });
+    (await deleteTimeEntryById(req.params.id));
+    res.json({ state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to delete time entry' });
   }
 });
 
-apiRouter.post('/work-notes', (req, res) => {
+apiRouter.post('/work-notes', async (req, res) => {
   try {
     const { id, taskId = null, title, content, tags = [] } = req.body;
     if (!title || !title.trim()) {
       res.status(400).json({ error: 'Note title is required.' });
       return;
     }
-    const task = taskId ? getTaskById(taskId) : null;
-    const note = upsertWorkNote({
+    const task = taskId ? (await getTaskById(taskId)) : null;
+    const note = (await upsertWorkNote({
       id: id || `wn-${Date.now()}`,
       taskId,
       taskCode: task?.taskCode || null,
@@ -760,135 +787,135 @@ apiRouter.post('/work-notes', (req, res) => {
       content: content || '',
       tags: Array.isArray(tags) ? tags : [],
       createdAt: new Date().toISOString(),
-    });
-    logActivity({
+    }));
+    (await logActivity({
       taskId: note.taskId,
       taskCode: note.taskCode,
       actionType: 'note',
       summary: `Added engineering work note: "${note.title}"`,
       details: note.content.slice(0, 120),
-    });
-    res.json({ note, state: getFullWorkspaceState() });
+    }));
+    res.json({ note, state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to save work note' });
   }
 });
 
-apiRouter.delete('/work-notes/:id', (req, res) => {
+apiRouter.delete('/work-notes/:id', async (req, res) => {
   try {
-    deleteWorkNoteById(req.params.id);
-    res.json({ state: getFullWorkspaceState() });
+    (await deleteWorkNoteById(req.params.id));
+    res.json({ state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to delete work note' });
   }
 });
 
-apiRouter.put('/settings', (req, res) => {
+apiRouter.put('/settings', async (req, res) => {
   try {
-    const current = getSettings();
-    const updated = saveSettings({
+    const current = (await getSettings());
+    const updated = (await saveSettings({
       ...current,
       ...req.body,
-    });
-    res.json({ settings: updated, state: getFullWorkspaceState() });
+    }));
+    res.json({ settings: updated, state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to update settings' });
   }
 });
 
-apiRouter.post('/workspace/clear-all', (_req, res) => {
+apiRouter.post('/workspace/clear-all', async (_req, res) => {
   try {
-    clearAllWorkspaceData();
-    res.json({ state: getFullWorkspaceState() });
+    (await clearAllWorkspaceData());
+    res.json({ state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to clear workspace data' });
   }
 });
 
-apiRouter.post('/demo/clear', (_req, res) => {
+apiRouter.post('/demo/clear', async (_req, res) => {
   try {
-    clearAllWorkspaceData();
-    res.json({ state: getFullWorkspaceState() });
+    (await clearAllWorkspaceData());
+    res.json({ state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to remove demo data' });
   }
 });
 
-apiRouter.post('/demo/restore', (_req, res) => {
+apiRouter.post('/demo/restore', async (_req, res) => {
   try {
-    restoreDemoData();
-    res.json({ state: getFullWorkspaceState() });
+    (await restoreDemoData());
+    res.json({ state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to restore demo data' });
   }
 });
 
-apiRouter.get('/backup/export', (_req, res) => {
+apiRouter.get('/backup/export', async (_req, res) => {
   try {
-    const bundle = createCompleteBackupBundle();
+    const bundle = (await createCompleteBackupBundle());
     res.json(bundle);
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to export backup' });
   }
 });
 
-apiRouter.post('/backup/restore', (req, res) => {
+apiRouter.post('/backup/restore', async (req, res) => {
   try {
     const { bundle, duplicatePolicy = 'overwrite' } = req.body as {
       bundle: any;
       duplicatePolicy?: DuplicatePolicy;
     };
-    const result = restoreFromBackupBundle(bundle, duplicatePolicy);
-    res.json({ result, state: getFullWorkspaceState() });
+    const result = (await restoreFromBackupBundle(bundle, duplicatePolicy));
+    res.json({ result, state: (await getFullWorkspaceState()) });
   } catch (err: any) {
     res.status(400).json({ error: err?.message || 'Failed to restore backup' });
   }
 });
 
 // Daily Focus Checklist Endpoints
-apiRouter.get('/focus', (_req, res) => {
+apiRouter.get('/focus', async (_req, res) => {
   try {
-    res.json({ items: getAllDailyFocusItems() });
+    res.json({ items: (await getAllDailyFocusItems()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to load daily focus items' });
   }
 });
 
-apiRouter.post('/focus', (req, res) => {
+apiRouter.post('/focus', async (req, res) => {
   try {
     const { id, text, taskCode = 'RAY', completed = false } = req.body;
     if (!text || !String(text).trim()) {
       res.status(400).json({ error: 'Focus item text is required.' });
       return;
     }
-    const existing = getAllDailyFocusItems().find((i) => i.id === id);
-    const saved = upsertDailyFocusItem({
+    const existing = (await getAllDailyFocusItems()).find((i) => i.id === id);
+    const saved = (await upsertDailyFocusItem({
       id: id || `focus-${Date.now()}`,
       text: String(text).trim(),
       taskCode: String(taskCode || 'RAY').trim(),
       completed: Boolean(completed),
       createdAt: existing?.createdAt || new Date().toISOString(),
-    });
-    res.json({ item: saved, items: getAllDailyFocusItems() });
+    }));
+    res.json({ item: saved, items: (await getAllDailyFocusItems()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to save daily focus item' });
   }
 });
 
-apiRouter.delete('/focus/:id', (req, res) => {
+apiRouter.delete('/focus/:id', async (req, res) => {
   try {
-    deleteDailyFocusItemById(req.params.id);
-    res.json({ items: getAllDailyFocusItems() });
+    (await deleteDailyFocusItemById(req.params.id));
+    res.json({ items: (await getAllDailyFocusItems()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to delete daily focus item' });
   }
 });
 
 // Multi-Turn Gemini Engineering Assistant Endpoints
-apiRouter.get('/chat/threads', (_req, res) => {
+apiRouter.get('/chat/threads', async (_req, res) => {
   try {
     res.json({
-      threads: getAllChatThreads(),
+      threads: (await getAllChatThreads()),
       roles: Object.values(BOT_ROLE_CONFIGS),
     });
   } catch (err: any) {
@@ -896,7 +923,7 @@ apiRouter.get('/chat/threads', (_req, res) => {
   }
 });
 
-apiRouter.post('/chat/threads', (req, res) => {
+apiRouter.post('/chat/threads', async (req, res) => {
   try {
     const {
       title,
@@ -910,10 +937,10 @@ apiRouter.post('/chat/threads', (req, res) => {
       linkedTaskId?: string;
     };
     const roleConfig = BOT_ROLE_CONFIGS[roleId] || BOT_ROLE_CONFIGS.investigator;
-    const linkedTask = linkedTaskId ? getTaskById(linkedTaskId) : null;
+    const linkedTask = linkedTaskId ? (await getTaskById(linkedTaskId)) : null;
     const now = new Date().toISOString();
 
-    const newThread = upsertChatThread({
+    const newThread = (await upsertChatThread({
       id: `thread-${Date.now()}`,
       title:
         title?.trim() ||
@@ -926,9 +953,9 @@ apiRouter.post('/chat/threads', (req, res) => {
       createdAt: now,
       updatedAt: now,
       messages: [],
-    });
+    }));
 
-    res.json({ thread: newThread, threads: getAllChatThreads() });
+    res.json({ thread: newThread, threads: (await getAllChatThreads()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to create chat thread' });
   }
@@ -936,7 +963,7 @@ apiRouter.post('/chat/threads', (req, res) => {
 
 apiRouter.post('/chat/threads/:id/messages', async (req, res) => {
   try {
-    const thread = getChatThreadById(req.params.id);
+    const thread = (await getChatThreadById(req.params.id));
     if (!thread) {
       res.status(404).json({ error: 'Chat thread not found.' });
       return;
@@ -959,7 +986,7 @@ apiRouter.post('/chat/threads/:id/messages', async (req, res) => {
       return;
     }
 
-    const state = getFullWorkspaceState();
+    const state = (await getFullWorkspaceState());
     const linkedTask = linkedTaskId
       ? state.tasks.find((t) => t.id === linkedTaskId || t.taskCode === linkedTaskId)
       : undefined;
@@ -992,18 +1019,18 @@ apiRouter.post('/chat/threads/:id/messages', async (req, res) => {
     };
 
     const updatedMessages = [...(Array.isArray(thread.messages) ? thread.messages : []), userMsg, modelMsg];
-    const updatedThread = upsertChatThread({
+    const updatedThread = (await upsertChatThread({
       ...thread,
       modelId,
       roleId,
       linkedTaskId,
       updatedAt: new Date().toISOString(),
       messages: updatedMessages,
-    });
+    }));
 
     res.json({
       thread: updatedThread,
-      threads: getAllChatThreads(),
+      threads: (await getAllChatThreads()),
       userMsg,
       modelMsg,
       fallbackNotice: result.fallbackNotice,
@@ -1013,10 +1040,10 @@ apiRouter.post('/chat/threads/:id/messages', async (req, res) => {
   }
 });
 
-apiRouter.delete('/chat/threads/:id', (req, res) => {
+apiRouter.delete('/chat/threads/:id', async (req, res) => {
   try {
-    deleteChatThreadById(req.params.id);
-    res.json({ threads: getAllChatThreads() });
+    (await deleteChatThreadById(req.params.id));
+    res.json({ threads: (await getAllChatThreads()) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to delete chat thread' });
   }
