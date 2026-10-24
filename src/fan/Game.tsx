@@ -83,9 +83,10 @@ export function WebSlinger() {
       }
     };
     function draw(t: number) {
-      const delta = Math.min(50, t - last);
+      const elapsedFrame = t - last;
+      const delta = Math.min(50, elapsedFrame);
       last = t;
-      if (running && !document.hidden && visible) elapsed += delta;
+      if (running && !document.hidden && visible) elapsed += elapsedFrame;
       ctx.clearRect(0, 0, width, height);
       ctx.strokeStyle = FX.colors[theme].cyan;
       ctx.globalAlpha = 0.12;
