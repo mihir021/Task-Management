@@ -1,13 +1,14 @@
 import React, { useEffect } from "react";
 import { WorkspaceGate } from "../MIHIR/src/components/WorkspaceGate";
 import { MihirWorkspaceApp } from "../MIHIR/src/MihirWorkspaceApp";
+import { WorkspaceExperience } from "./workspace/WorkspaceExperience";
 export default function Workspace() {
   useEffect(() => {
     document.title = "MIHIR Workspace — Tasks and Ports Monitoring";
   }, []);
   return (
-    <WorkspaceGate>
+    <WorkspaceExperience><WorkspaceGate>
       <MihirWorkspaceApp />
-    </WorkspaceGate>
+    </WorkspaceGate></WorkspaceExperience>
   );
 }

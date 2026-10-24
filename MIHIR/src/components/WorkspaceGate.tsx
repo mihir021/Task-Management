@@ -42,10 +42,10 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
     } catch (problem: any) { window.alert(problem.message); }
   }
   if (unlocked) return <><div className="fixed bottom-3 right-3 z-50"><button onClick={lock} className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 shadow-lg hover:bg-slate-100"><LockKeyhole size={14} />Lock workspace</button></div>{children}</>;
-  return <main className="min-h-screen bg-slate-950 text-white grid lg:grid-cols-2">
+  return <main className="thread-login min-h-screen bg-slate-950 text-white grid lg:grid-cols-2">
     <section className="hidden lg:flex flex-col justify-between p-14 bg-gradient-to-br from-indigo-600 via-indigo-800 to-slate-950">
       <div className="font-semibold flex items-center gap-3"><Terminal size={24} />MIHIR Workspace</div>
-      <div><span className="text-xs uppercase tracking-[0.24em] text-indigo-200">Your daily command center</span><h1 className="text-5xl font-semibold leading-tight mt-5 max-w-lg">Everything you need.<br />One focused workspace.</h1><p className="text-indigo-200 mt-6 max-w-md leading-relaxed">Track your work, inspect Ray services, and keep your terminal workflows close at hand.</p></div>
+      <div><span className="text-xs uppercase tracking-[0.24em] text-indigo-200">Your daily command center</span><h1 className="text-5xl font-semibold leading-tight mt-5 max-w-lg">A little focus.<br />A lot of forward.</h1><p className="text-indigo-200 mt-6 max-w-md leading-relaxed">Track your work, inspect Ray services, and keep your terminal workflows close at hand.</p></div>
       <p className="text-sm text-indigo-200 flex gap-2 items-center"><ShieldCheck size={17} />Private workspace · Password protected</p>
     </section>
     <section className="flex items-center justify-center px-6 py-12"><div className="w-full max-w-sm">

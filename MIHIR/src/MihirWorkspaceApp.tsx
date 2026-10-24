@@ -1,3 +1,5 @@
+import { useFan } from "../../src/fan/store";
+import { WorkspaceExperienceControls } from "../../src/workspace/WorkspaceExperience";
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   LayoutDashboard,
@@ -70,7 +72,6 @@ import {
 type MainSection = 'dashboard' | 'tasks' | 'projects' | 'worklog' | 'monitor' | 'ports' | 'scripts' | 'copilot' | 'settings';
 
 export const MihirWorkspaceApp: React.FC = () => {
-  const [spiderTheme, setSpiderTheme] = useState(() => localStorage.getItem('mihir_appearance') !== 'classic');
   const [workspace, setWorkspace] = useState<WorkspaceStatePayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorBanner, setErrorBanner] = useState<string>('');
@@ -261,10 +262,7 @@ export const MihirWorkspaceApp: React.FC = () => {
   };
 
   // Apply theme preference to <html> and localStorage
-  const currentTheme = useMemo(() => {
-    const savedLocal = localStorage.getItem('mihir_theme') as 'light' | 'dark' | null;
-    return workspace?.settings.theme || savedLocal || 'dark';
-  }, [workspace?.settings.theme]);
+  const currentTheme = useFan(s => s.theme === 'classic' ? 'light' : 'dark');
 
   useEffect(() => {
     const root = document.documentElement;
@@ -320,6 +318,7 @@ export const MihirWorkspaceApp: React.FC = () => {
 
   const handleToggleTheme = async () => {
     const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    useFan.getState().setTheme(nextTheme === 'dark' ? 'noir' : 'classic');
     localStorage.setItem('mihir_theme', nextTheme);
     const root = document.documentElement;
     if (nextTheme === 'dark') {
@@ -698,7 +697,7 @@ export const MihirWorkspaceApp: React.FC = () => {
   ];
 
   return (
-    <div data-appearance={spiderTheme ? 'spider' : 'classic'} className="workspace-shell min-h-screen flex bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+    <div data-appearance="spider" className="workspace-shell min-h-screen flex bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       {/* Collapsible Desktop Left Sidebar */}
       <aside
         aria-label="Primary Workspace Navigation"
@@ -716,7 +715,7 @@ export const MihirWorkspaceApp: React.FC = () => {
               }}
               className="text-sm font-bold tracking-tight text-slate-900 dark:text-slate-100 whitespace-nowrap truncate"
             >
-              <span className="brand-lockup"><SpiderMark className="brand-spider" /><span>MIHIR Workspace<small>ENGINEERING JOURNAL</small></span></span>
+              <span className="brand-lockup"><SpiderMark className="brand-spider" /><span>MIHIR Workspace<small>YOUR DAILY ISSUE</small></span></span>
             </button>
           )}
           <button
@@ -734,7 +733,7 @@ export const MihirWorkspaceApp: React.FC = () => {
         </div>
 
         {!sidebarCollapsed && <div className="sidebar-project"><span className="project-icon">R</span><div><small>PROJECT</small><strong>Ray workspace</strong></div><span className="connection-dot online" /></div>}
-        <button type="button" className="appearance-switch" aria-label={spiderTheme ? 'Switch to classic appearance' : 'Switch to Spider-Man appearance'} onClick={() => { const next = !spiderTheme; setSpiderTheme(next); localStorage.setItem('mihir_appearance', next ? 'spider' : 'classic'); }}>{sidebarCollapsed ? '◈' : spiderTheme ? '◈ Spider-Man edition' : '◈ Classic edition'}</button>
+        <div className="thread-sidebar-edition">{sidebarCollapsed ? "TC" : "THREAD CITY / WORKSPACE EDITION"}</div>
         <nav className="flex-1 p-3 space-y-1">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
@@ -819,18 +818,7 @@ export const MihirWorkspaceApp: React.FC = () => {
               <span>Project: Ray</span>
               <span>{workspace.tasks.length} tasks</span>
             </div>
-            <button
-              type="button"
-              onClick={handleToggleTheme}
-              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
-            >
-              <span>Theme: {currentTheme === 'dark' ? 'Dark' : 'Light'}</span>
-              {currentTheme === 'dark' ? (
-                <Sun className="w-3.5 h-3.5" />
-              ) : (
-                <Moon className="w-3.5 h-3.5" />
-              )}
-            </button>
+            <p className="thread-sidebar-note">ONE THREAD. ALL YOUR WORK.</p>
           </div>
         )}
       </aside>
@@ -855,7 +843,7 @@ export const MihirWorkspaceApp: React.FC = () => {
               </button>
             </div>
             {!sidebarCollapsed && <div className="sidebar-project"><span className="project-icon">R</span><div><small>PROJECT</small><strong>Ray workspace</strong></div><span className="connection-dot online" /></div>}
-        <button type="button" className="appearance-switch" aria-label={spiderTheme ? 'Switch to classic appearance' : 'Switch to Spider-Man appearance'} onClick={() => { const next = !spiderTheme; setSpiderTheme(next); localStorage.setItem('mihir_appearance', next ? 'spider' : 'classic'); }}>{sidebarCollapsed ? '◈' : spiderTheme ? '◈ Spider-Man edition' : '◈ Classic edition'}</button>
+        <div className="thread-sidebar-edition">{sidebarCollapsed ? "TC" : "THREAD CITY / WORKSPACE EDITION"}</div>
         <nav className="flex-1 p-3 space-y-1">
               {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
@@ -1004,6 +992,8 @@ export const MihirWorkspaceApp: React.FC = () => {
             </button>
           </div>
         </header>
+
+        <div className="thread-edition-bar"><span>MIHIR / ENGINEERING JOURNAL</span><WorkspaceExperienceControls /></div>
 
         {/* Feedback / Error Banners */}
         {errorBanner && (
