@@ -1,3 +1,4 @@
+import { mergeTaskRepositoryDraft } from "../lib/taskRepositoryDraft";
 import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft,
@@ -171,6 +172,10 @@ export const TaskDetailView: React.FC<TaskDetailViewProps> = ({
     tags: task.tags,
   });
   const [overviewDirty, setOverviewDirty] = useState(false);
+  const [repoDraft, setRepoDraft] = useState<TaskRepository[]>(task.repositories);
+  const [overviewSaving, setOverviewSaving] = useState(false);
+  const [overviewError, setOverviewError] = useState('');
+  const [sharedBranch, setSharedBranch] = useState('');
   const [overviewSavedMsg, setOverviewSavedMsg] = useState('');
 
   // Investigation form state
@@ -197,6 +202,9 @@ export const TaskDetailView: React.FC<TaskDetailViewProps> = ({
       tags: task.tags,
     });
     setOverviewDirty(false);
+    setRepoDraft(task.repositories);
+    setSharedBranch('');
+    setOverviewError('');
     setInvDraft(task.investigation);
     setInvDirty(false);
   }, [task.id]);
@@ -285,16 +293,18 @@ export const TaskDetailView: React.FC<TaskDetailViewProps> = ({
 
   const handleSaveOverview = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (overviewSaving) return;
+    setOverviewSaving(true); setOverviewError('');
+    try {
     await onUpdateTask(
       task.id,
       {
+        repositories: mergeTaskRepositoryDraft(task.repositories, repoDraft),
         taskCode: overviewDraft.taskCode.trim() || task.taskCode,
         title: overviewDraft.title.trim() || task.title,
         description: overviewDraft.description,
         ticketUrl: overviewDraft.ticketUrl,
         assignedBy: overviewDraft.assignedBy,
-        priority: overviewDraft.priority,
-        status: overviewDraft.status,
         dueDate: overviewDraft.dueDate ? new Date(overviewDraft.dueDate).toISOString() : null,
         expectedOutcome: overviewDraft.expectedOutcome,
         acceptanceCriteria: overviewDraft.acceptanceCriteria,
@@ -308,6 +318,8 @@ export const TaskDetailView: React.FC<TaskDetailViewProps> = ({
     setOverviewDirty(false);
     setOverviewSavedMsg('Saved');
     setTimeout(() => setOverviewSavedMsg(''), 2000);
+    } catch (error: any) { setOverviewError(error.message || 'Unable to save. Your edits are still here.'); }
+    finally { setOverviewSaving(false); }
   };
 
   const handleSaveInvestigation = async (e: React.FormEvent) => {
@@ -324,9 +336,9 @@ export const TaskDetailView: React.FC<TaskDetailViewProps> = ({
   };
 
   const handleAddRepositoryToTask = async (repoCfg: RepositoryConfig) => {
-    if (task.repositories.some((r) => r.repositoryName === repoCfg.name)) return;
+    if (repoDraft.some((r) => r.repositoryName === repoCfg.name)) return;
     const repoLinkId = `${task.id}-repo-${Date.now()}`;
-    const workingBranch = `RAY-MIHIR-${task.taskCode}`;
+    const workingBranch = sharedBranch || `RAY-${task.taskCode}`;
     const newRepoLink: TaskRepository = {
       id: repoLinkId,
       repositoryId: repoCfg.id,
@@ -347,12 +359,8 @@ export const TaskDetailView: React.FC<TaskDetailViewProps> = ({
         repoCfg.defaultWorkflowMode
       ),
     };
-    await onUpdateTask(
-      task.id,
-      { repositories: [...task.repositories, newRepoLink] },
-      `Attached repository ${repoCfg.name} (${workingBranch}) to ${task.taskCode}`,
-      'git'
-    );
+    setRepoDraft(prev => [...prev, newRepoLink]);
+    setOverviewDirty(true);
   };
 
   const handleAddCustomRepositoryInline = async () => {
@@ -403,21 +411,13 @@ export const TaskDetailView: React.FC<TaskDetailViewProps> = ({
     field: keyof TaskRepository,
     value: string
   ) => {
-    const updatedRepos = task.repositories.map((r) =>
-      r.id === repoId
-        ? {
-            ...r,
-            [field]: value,
-            ...(field === 'baseBranch' ? { devTargetBranch: value } : {}),
-          }
-        : r
-    );
-    await onUpdateTask(task.id, { repositories: updatedRepos });
+    setRepoDraft(prev => prev.map(r => r.id === repoId ? { ...r, [field]: value, ...(field === 'baseBranch' ? { devTargetBranch: value } : {}) } : r));
+    setOverviewDirty(true);
   };
 
   const handleRemoveRepoFromTask = async (repoId: string) => {
-    const updatedRepos = task.repositories.filter((r) => r.id !== repoId);
-    await onUpdateTask(task.id, { repositories: updatedRepos });
+    setRepoDraft(prev => prev.filter(r => r.id !== repoId));
+    setOverviewDirty(true);
   };
 
   const handleAddFileChange = async (e: React.FormEvent) => {
@@ -535,7 +535,7 @@ export const TaskDetailView: React.FC<TaskDetailViewProps> = ({
   };
 
   const TABS: Array<{ id: TaskDetailTab; label: string; count?: number }> = [
-    { id: 'overview', label: 'Overview & Workspace', count: task.repositories.length },
+    { id: 'overview', label: 'Details', count: task.repositories.length },
     { id: 'investigation', label: 'Investigation' },
     { id: 'files', label: 'Changed Files', count: task.changedFiles.length },
     { id: 'attachments', label: 'Screenshots', count: task.attachments.length },
@@ -746,74 +746,148 @@ export const TaskDetailView: React.FC<TaskDetailViewProps> = ({
 
       {/* TAB 1: Overview & Workspace (Sections A & B) */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <form onSubmit={handleSaveOverview} className="lg:col-span-2 p-6 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+        <form onSubmit={handleSaveOverview} onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); if (!overviewSaving) e.currentTarget.requestSubmit(); } }} className="task-simple-editor surface p-5 sm:p-6 space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="text-lg font-semibold">Task details</h2><p className="text-xs text-slate-500 mt-1">Describe the work. Pick your folders. Add the branches.</p></div>
+            <span role="status" className="text-xs text-slate-500">{overviewSaving ? 'Saving…' : overviewDirty ? 'Unsaved changes' : overviewSavedMsg || 'All changes saved'}</span>
+          </div>
+          {overviewError && <p role="alert" className="text-sm text-red-600">{overviewError}</p>}
+          <fieldset disabled={overviewSaving} className="space-y-5 min-w-0">
+          <label className="block text-sm font-medium">Task title<input aria-label="Task title" required value={overviewDraft.title} onChange={e => { setOverviewDraft({ ...overviewDraft, title: e.target.value }); setOverviewDirty(true); }} className="field block w-full mt-2" /></label>
+          <label className="block text-sm font-medium">Description<textarea aria-label="Task description" rows={4} value={overviewDraft.description} onChange={e => { setOverviewDraft({ ...overviewDraft, description: e.target.value }); setOverviewDirty(true); }} placeholder="What needs to change? Paste the request or explain it in your own words…" className="field block w-full mt-2" /></label>
+          <div className="p-6 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-start justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
               <div>
-                <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                  A. Task Overview & Assignment Metadata
+                <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                  <FolderGit2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  Folders & branches
                 </h2>
-                <p className="text-xs text-slate-500">
-                  Core assignment details, acceptance criteria, and blocker notes.
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Choose the folders you work in, then enter a branch for each.
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                {overviewDirty && (
-                  <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">
-                    Unsaved changes
-                  </span>
-                )}
-                {overviewSavedMsg && (
-                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                    ✓ {overviewSavedMsg}
-                  </span>
-                )}
-                <button
-                  type="submit"
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  Save Overview
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddCustomRepo((prev) => !prev)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/80 hover:bg-indigo-100 whitespace-nowrap shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {showAddCustomRepo ? 'Cancel' : 'Add Repo / Folder'}
+              </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
-                    Task ID
-                  </label>
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/70">
-                    Auto
-                  </span>
+            {showAddCustomRepo && (
+              <div className="p-3 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800/70 space-y-2">
+                <div className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                  Add Custom Repository or Folder
                 </div>
-                <input
-                  type="text"
-                  value={overviewDraft.taskCode}
-                  readOnly
-                  aria-readonly="true"
-                  title="Task ID is automatically assigned"
-                  className="w-full px-3 py-2 text-xs font-mono font-semibold rounded-lg border border-indigo-200 dark:border-indigo-900/70 bg-indigo-50/40 dark:bg-slate-950 text-indigo-700 dark:text-indigo-300 cursor-default"
-                />
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    value={customRepoName}
+                    onChange={(e) => setCustomRepoName(e.target.value)}
+                    placeholder="Repo or custom folder name..."
+                    className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={customRepoBaseBranch}
+                      onChange={(e) => setCustomRepoBaseBranch(e.target.value)}
+                      placeholder="Base branch (e.g. development)"
+                      className="flex-1 px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                    />
+                    <button
+                      type="button"
+                      disabled={addingCustomRepo}
+                      onClick={handleAddCustomRepositoryInline}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white whitespace-nowrap disabled:opacity-50"
+                    >
+                      {addingCustomRepo ? 'Adding...' : 'Add & Attach'}
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div className="sm:col-span-3">
-                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Title
-                </label>
-                <input
-                  type="text"
-                  value={overviewDraft.title}
-                  onChange={(e) => {
-                    setOverviewDraft({ ...overviewDraft, title: e.target.value });
-                    setOverviewDirty(true);
-                  }}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950"
-                />
+            )}
+
+            <div className="space-y-1.5">
+              <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                Choose folders:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {repositories.map((repo) => {
+                  const attached = repoDraft.some((r) => r.repositoryName === repo.name);
+                  return (
+                    <button
+                      key={repo.id}
+                      type="button"
+                      aria-pressed={attached}
+                      onClick={() => { const linked = repoDraft.find(r => r.repositoryName === repo.name); if (linked) void handleRemoveRepoFromTask(linked.id); else void handleAddRepositoryToTask(repo); }}
+                      className={`px-2.5 py-1 text-xs font-mono rounded-lg border transition-colors ${
+                        attached
+                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-800 '
+                          : 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100'
+                      }`}
+                    >
+                      {attached ? `✓ ${repo.name}` : `+ ${repo.name}`}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {repoDraft.length > 1 && <label className="block text-xs text-slate-500">Use the same branch for all selected folders <span className="text-slate-400">optional</span><input aria-label="Branch for all selected folders" value={sharedBranch} placeholder="Type once to fill every folder" onChange={event => { const value = event.target.value; setSharedBranch(value); setRepoDraft(prev => prev.map(r => ({ ...r, workingBranch: value }))); setOverviewDirty(true); }} className="field block w-full mt-2" /></label>}
+            <div className="space-y-4">
+              {repoDraft.map((repo) => (
+                <div
+                  key={repo.id}
+                  className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2.5 text-xs"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                      {repo.repositoryName}
+                    </span>
+                    {(
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveRepoFromTask(repo.id)}
+                        className="text-[11px] text-slate-400 hover:text-red-500"
+                      >
+                        Unlink
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-0.5">Base branch</label>
+                      <input
+                        type="text"
+                        aria-label={`Base branch for ${repo.repositoryName}`} value={repo.baseBranch}
+                        onChange={(e) =>
+                          handleUpdateRepoMeta(repo.id, 'baseBranch', e.target.value)
+                        }
+                        className="w-full px-2.5 py-1.5 text-xs font-mono rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-0.5">Branch you are working on</label>
+                      <input
+                        type="text"
+                        aria-label={`Working branch for ${repo.repositoryName}`} placeholder="e.g. RAY-MIHIR-FIX-LOGS" value={repo.workingBranch}
+                        onChange={(e) =>
+                          handleUpdateRepoMeta(repo.id, 'workingBranch', e.target.value)
+                        }
+                        className="w-full px-2.5 py-1.5 text-xs font-mono rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <details className="task-extra-details border-t border-slate-200 pt-4"><summary className="cursor-pointer text-sm font-medium">Extra details <span className="text-xs text-slate-500">optional · due date, assignment, acceptance criteria, tags</span></summary><div className="space-y-4 mt-4">            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                   Assigned By
@@ -856,21 +930,6 @@ export const TaskDetailView: React.FC<TaskDetailViewProps> = ({
                   className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950"
                 />
               </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Description (What Was Requested)
-              </label>
-              <textarea
-                rows={3}
-                value={overviewDraft.description}
-                onChange={(e) => {
-                  setOverviewDraft({ ...overviewDraft, description: e.target.value });
-                  setOverviewDirty(true);
-                }}
-                className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950"
-              />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -951,7 +1010,8 @@ export const TaskDetailView: React.FC<TaskDetailViewProps> = ({
               </div>
             </div>
 
-            {/* Sub-tasks & Execution Checklist */}
+</div></details>
+          <details className="task-extra-details border-t border-slate-200 pt-4"><summary className="cursor-pointer text-sm font-medium">Checklist <span className="text-xs text-slate-500">optional · {checklistProgress.completedCount}/{checklistProgress.totalCount} done</span></summary>            {/* Sub-tasks & Execution Checklist */}
             <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
@@ -1048,140 +1108,10 @@ export const TaskDetailView: React.FC<TaskDetailViewProps> = ({
                 </button>
               </div>
             </div>
-          </form>
-
-          {/* Section B: Project & Linked Repositories */}
-          <div className="p-6 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
-            <div className="flex items-start justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div>
-                <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                  <FolderGit2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                  B. Project & Repositories
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Link Ray repositories or custom workspace folders with Base Branch and Working Branch tracking.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowAddCustomRepo((prev) => !prev)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/80 hover:bg-indigo-100 whitespace-nowrap shrink-0"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                {showAddCustomRepo ? 'Cancel' : 'Add Repo / Folder'}
-              </button>
-            </div>
-
-            {showAddCustomRepo && (
-              <div className="p-3 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800/70 space-y-2">
-                <div className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                  Add Custom Repository or Folder
-                </div>
-                <div className="space-y-2">
-                  <input
-                    type="text"
-                    value={customRepoName}
-                    onChange={(e) => setCustomRepoName(e.target.value)}
-                    placeholder="Repo or custom folder name..."
-                    className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
-                  />
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={customRepoBaseBranch}
-                      onChange={(e) => setCustomRepoBaseBranch(e.target.value)}
-                      placeholder="Base branch (e.g. development)"
-                      className="flex-1 px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
-                    />
-                    <button
-                      type="button"
-                      disabled={addingCustomRepo}
-                      onClick={handleAddCustomRepositoryInline}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white whitespace-nowrap disabled:opacity-50"
-                    >
-                      {addingCustomRepo ? 'Adding...' : 'Add & Attach'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-1.5">
-              <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                Attach Repository to Task:
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {repositories.map((repo) => {
-                  const attached = task.repositories.some((r) => r.repositoryName === repo.name);
-                  return (
-                    <button
-                      key={repo.id}
-                      type="button"
-                      disabled={attached}
-                      onClick={() => handleAddRepositoryToTask(repo)}
-                      className={`px-2.5 py-1 text-xs font-mono rounded-lg border transition-colors ${
-                        attached
-                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-800 cursor-not-allowed'
-                          : 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100'
-                      }`}
-                    >
-                      {attached ? `✓ ${repo.name}` : `+ ${repo.name}`}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {task.repositories.map((repo) => (
-                <div
-                  key={repo.id}
-                  className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2.5 text-xs"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                      {repo.repositoryName}
-                    </span>
-                    {task.repositories.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveRepoFromTask(repo.id)}
-                        className="text-[11px] text-slate-400 hover:text-red-500"
-                      >
-                        Unlink
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <div>
-                      <label className="block text-[11px] text-slate-500 mb-0.5">Base Branch</label>
-                      <input
-                        type="text"
-                        value={repo.baseBranch}
-                        onChange={(e) =>
-                          handleUpdateRepoMeta(repo.id, 'baseBranch', e.target.value)
-                        }
-                        className="w-full px-2.5 py-1.5 text-xs font-mono rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-slate-500 mb-0.5">Working Branch</label>
-                      <input
-                        type="text"
-                        value={repo.workingBranch}
-                        onChange={(e) =>
-                          handleUpdateRepoMeta(repo.id, 'workingBranch', e.target.value)
-                        }
-                        className="w-full px-2.5 py-1.5 text-xs font-mono rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+</details>
+          </fieldset>
+          <div className="task-save-bar flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4"><span className="text-xs text-slate-500">Description and folder branches save together.</span><button type="submit" disabled={overviewSaving || !overviewDirty} className="primary-button"><Save size={15} />{overviewSaving ? 'Saving…' : 'Save changes'}</button></div>
+        </form>
       )}
 
       {/* TAB 2: Problem & Investigation (Section C) */}

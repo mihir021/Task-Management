@@ -83,3 +83,10 @@
 .thread-workspace[data-thread-theme="noir"] { --thread-ink:#f5f0e7; }
 .thread-workspace[data-thread-theme="2099"] { --thread-ink:#edf4ff; }
 .thread-workspace .workspace-shell { --ink:var(--thread-ink); }
+.task-simple-editor { max-width:1050px; margin:0 auto; }
+.task-simple-editor > fieldset > div.p-6 { padding:20px; background:var(--tint); border-radius:4px; }
+.task-simple-editor .task-extra-details summary { line-height:1.8; }
+.task-simple-editor .task-extra-details summary span { display:inline-block; margin-left:7px; font-weight:400; }
+.task-simple-editor .task-save-bar { position:sticky; bottom:0; background:var(--panel); z-index:5; padding-bottom:6px; }
+.task-simple-editor input,.task-simple-editor textarea { font-size:13px; line-height:1.7; }
+@media(max-width:700px) { .task-simple-editor > fieldset > div.p-6 { padding:14px; } .task-simple-editor .task-extra-details summary span { display:block; margin:0 0 0 14px; } }

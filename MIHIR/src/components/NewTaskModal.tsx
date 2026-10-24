@@ -54,6 +54,7 @@ export const NewTaskModal: React.FC<NewTaskModalProps> = ({
     }>
   >([]);
   const [showOptions, setShowOptions] = useState(false);
+  const [sharedBranch, setSharedBranch] = useState('');
 
   // Inline custom repo / folder form state
   const [showAddRepoForm, setShowAddRepoForm] = useState(false);
@@ -75,7 +76,7 @@ export const NewTaskModal: React.FC<NewTaskModalProps> = ({
         return {
           ...item,
           workingBranch: isAutoWorkingBranch
-            ? `RAY-MIHIR-${suggestedTaskCode}`
+            ? `RAY-${suggestedTaskCode}`
             : item.workingBranch,
         };
       });
@@ -102,7 +103,7 @@ export const NewTaskModal: React.FC<NewTaskModalProps> = ({
           repositoryId: repo.id,
           repositoryName: repo.name,
           baseBranch: repo.defaultBaseBranch,
-          workingBranch: `RAY-MIHIR-${activeCode}`,
+          workingBranch: sharedBranch || `RAY-${activeCode}`,
           devTargetBranch: repo.defaultBaseBranch,
           cloudTargetName: repo.cloudTargetName,
         },
@@ -150,7 +151,7 @@ export const NewTaskModal: React.FC<NewTaskModalProps> = ({
             repositoryId: newRepoId,
             repositoryName: newRepoName,
             baseBranch,
-            workingBranch: `RAY-MIHIR-${activeCode}`,
+            workingBranch: sharedBranch || `RAY-${activeCode}`,
             devTargetBranch: baseBranch,
             cloudTargetName: 'cloud-release',
           },
@@ -233,7 +234,7 @@ export const NewTaskModal: React.FC<NewTaskModalProps> = ({
       if (created) {
         setTitle('');
         setPriority('Medium'); setStatus('Todo'); setAssignedBy('Self'); setDueDate('');
-        setSelectedRepos([]); setShowOptions(false); setShowAddRepoForm(false);
+        setSelectedRepos([]); setSharedBranch(''); setShowOptions(false); setShowAddRepoForm(false);
         setDescription('');
         setExpectedOutcome('');
         setAcceptanceCriteria('');
@@ -268,13 +269,185 @@ export const NewTaskModal: React.FC<NewTaskModalProps> = ({
             <label htmlFor="new-task-title" className="block text-sm font-medium text-slate-700 dark:text-slate-300">What needs to be done?
               <input id="new-task-title" required maxLength={300} type="text" value={title} onChange={event => setTitle(event.target.value)} placeholder="e.g. Fix the profile page loading issue" autoFocus className="mt-2 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-4 py-3 text-base text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </label>
-            <label htmlFor="new-task-desc" className="block text-sm text-slate-700 dark:text-slate-300">Notes <span className="text-slate-400 text-xs font-normal">optional</span>
+            <label htmlFor="new-task-desc" className="block text-sm text-slate-700 dark:text-slate-300">Description <span className="text-slate-400 text-xs font-normal">optional</span>
               <textarea id="new-task-desc" rows={3} value={description} onChange={event => setDescription(event.target.value)} placeholder="Paste the request, a link, or anything you want to remember…" className="mt-2 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </label>
+          {/* Repositories & Branches section */}
+          <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-slate-800">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <FolderGit2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                Folders & branches
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowAddRepoForm((prev) => !prev)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/80 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
+              >
+                <FolderPlus className="w-3.5 h-3.5" />
+                {showAddRepoForm ? 'Cancel' : 'Add folder'}
+              </button>
+            </div>
+
+            {showAddRepoForm && (
+              <div className="p-3 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800/70 space-y-2.5">
+                <div className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                  Add a new repository or custom workspace folder
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="sm:col-span-2">
+                    <label htmlFor="custom-repo-name-input" className="block text-[11px] text-slate-500 mb-0.5">
+                      Repository / Custom Folder Name *
+                    </label>
+                    <input
+                      id="custom-repo-name-input"
+                      type="text"
+                      value={customRepoName}
+                      onChange={(e) => setCustomRepoName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddCustomRepoInline();
+                        }
+                      }}
+                      placeholder="e.g., raycustom-folder or raydashboard-hotfix"
+                      className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="custom-repo-base-input" className="block text-[11px] text-slate-500 mb-0.5">
+                      Default Base Branch
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        id="custom-repo-base-input"
+                        type="text"
+                        value={customBaseBranch}
+                        onChange={(e) => setCustomBaseBranch(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddCustomRepoInline();
+                          }
+                        }}
+                        placeholder="development"
+                        className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                      />
+                      <button
+                        type="button"
+                        disabled={addingCustomRepo}
+                        onClick={handleAddCustomRepoInline}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white whitespace-nowrap shrink-0 disabled:opacity-50"
+                      >
+                        {addingCustomRepo ? 'Adding...' : 'Add'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              {repositories.map((repo) => {
+                const isSelected = selectedRepos.some(
+                  (r) => r.repositoryId === repo.id || r.repositoryName === repo.name
+                );
+                return (
+                  <button
+                    key={repo.id}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => handleToggleRepo(repo)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium border transition-colors whitespace-nowrap ${
+                      isSelected
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-indigo-400'
+                    }`}
+                  >
+                    {isSelected ? '✓ ' : '+ '}
+                    {repo.name}
+                  </button>
+                );
+              })}
+            </div>
+
+            {selectedRepos.length > 1 && <label className="block text-xs text-slate-500">Same branch for every folder <span className="text-slate-400">optional</span><input aria-label="Branch for all selected folders" className="field w-full block mt-2" value={sharedBranch} placeholder="Type once to fill every folder" onChange={event => { const value = event.target.value; setSharedBranch(value); setSelectedRepos(prev => prev.map(r => ({ ...r, workingBranch: value }))); }} /></label>}
+            {selectedRepos.length > 0 && (
+              <div className="space-y-2.5">
+                {selectedRepos.map((sel) => {
+                  const repoObj = repositories.find(
+                    (r) => r.id === sel.repositoryId || r.name === sel.repositoryName
+                  );
+                  const displayName = repoObj?.name || sel.repositoryName || sel.repositoryId;
+                  return (
+                    <div
+                      key={sel.repositoryId}
+                      className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2"
+                    >
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-mono font-semibold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+                          <GitBranch className="w-3.5 h-3.5" />
+                          {displayName}
+                        </span>
+                        {(
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSelectedRepos((prev) =>
+                                prev.filter((r) => r.repositoryId !== sel.repositoryId)
+                              )
+                            }
+                            className="text-[11px] text-slate-400 hover:text-red-500 transition-colors"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] text-slate-500 mb-0.5">
+                            Base Branch
+                          </label>
+                          <input
+                            type="text"
+                            aria-label={`Base branch for ${displayName}`} value={sel.baseBranch}
+                            onChange={(e) =>
+                              handleUpdateRepoField(sel.repositoryId, 'baseBranch', e.target.value)
+                            }
+                            className="w-full px-2.5 py-1.5 text-xs font-mono rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                            placeholder="development2"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-slate-500 mb-0.5">
+                            Your branch
+                          </label>
+                          <input
+                            type="text"
+                            aria-label={`Working branch for ${displayName}`} value={sel.workingBranch}
+                            onChange={(e) =>
+                              handleUpdateRepoField(
+                                sel.repositoryId,
+                                'workingBranch',
+                                e.target.value
+                              )
+                            }
+                            className="w-full px-2.5 py-1.5 text-xs font-mono rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                            placeholder="RAY-MIHIR-Security-Graphs"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
             <div className="flex flex-wrap gap-2 text-xs text-slate-500"><span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-1">{status}</span><span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-1">{priority} priority</span><span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-1">{projectName}</span>{selectedRepos.length > 0 && <span className="rounded-full bg-indigo-50 dark:bg-indigo-950 px-2.5 py-1 text-indigo-600">{selectedRepos.length} repositories</span>}</div>
             <details open={showOptions} onToggle={event => setShowOptions(event.currentTarget.open)} className="border-t border-slate-200 dark:border-slate-800 pt-4">
               <summary className="cursor-pointer text-sm font-medium text-slate-600 dark:text-slate-300"><Settings2 size={15} className="inline mr-2" />More details <span className="font-normal text-xs text-slate-400 ml-1">optional</span></summary>
-              <p className="text-xs text-slate-500 mt-2">Project, priority, due date, repository, branches, and checklist. None are required to create a task.</p>
+              <p className="text-xs text-slate-500 mt-2">Project, priority, due date, and checklist. None are required to create a task.</p>
               <div className="space-y-5 mt-5">
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <div>
@@ -372,176 +545,6 @@ export const NewTaskModal: React.FC<NewTaskModalProps> = ({
                 placeholder="https://ray.internal/browse/RAY-..."
               />
             </div>
-          </div>
-
-          {/* Repositories & Branches section */}
-          <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-slate-800">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                <FolderGit2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                Target Repositories & Branch Configuration
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowAddRepoForm((prev) => !prev)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/80 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
-              >
-                <FolderPlus className="w-3.5 h-3.5" />
-                {showAddRepoForm ? 'Cancel' : '+ Add Repo / Custom Folder'}
-              </button>
-            </div>
-
-            {showAddRepoForm && (
-              <div className="p-3 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800/70 space-y-2.5">
-                <div className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                  Add a new repository or custom workspace folder
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <div className="sm:col-span-2">
-                    <label htmlFor="custom-repo-name-input" className="block text-[11px] text-slate-500 mb-0.5">
-                      Repository / Custom Folder Name *
-                    </label>
-                    <input
-                      id="custom-repo-name-input"
-                      type="text"
-                      value={customRepoName}
-                      onChange={(e) => setCustomRepoName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleAddCustomRepoInline();
-                        }
-                      }}
-                      placeholder="e.g., raycustom-folder or raydashboard-hotfix"
-                      className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="custom-repo-base-input" className="block text-[11px] text-slate-500 mb-0.5">
-                      Default Base Branch
-                    </label>
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        id="custom-repo-base-input"
-                        type="text"
-                        value={customBaseBranch}
-                        onChange={(e) => setCustomBaseBranch(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleAddCustomRepoInline();
-                          }
-                        }}
-                        placeholder="development"
-                        className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
-                      />
-                      <button
-                        type="button"
-                        disabled={addingCustomRepo}
-                        onClick={handleAddCustomRepoInline}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white whitespace-nowrap shrink-0 disabled:opacity-50"
-                      >
-                        {addingCustomRepo ? 'Adding...' : 'Add'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="flex flex-wrap gap-2">
-              {repositories.map((repo) => {
-                const isSelected = selectedRepos.some(
-                  (r) => r.repositoryId === repo.id || r.repositoryName === repo.name
-                );
-                return (
-                  <button
-                    key={repo.id}
-                    type="button"
-                    onClick={() => handleToggleRepo(repo)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium border transition-colors whitespace-nowrap ${
-                      isSelected
-                        ? 'bg-indigo-600 text-white border-indigo-600'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-indigo-400'
-                    }`}
-                  >
-                    {isSelected ? '✓ ' : '+ '}
-                    {repo.name}
-                  </button>
-                );
-              })}
-            </div>
-
-            {selectedRepos.length > 0 && (
-              <div className="space-y-2.5">
-                {selectedRepos.map((sel) => {
-                  const repoObj = repositories.find(
-                    (r) => r.id === sel.repositoryId || r.name === sel.repositoryName
-                  );
-                  const displayName = repoObj?.name || sel.repositoryName || sel.repositoryId;
-                  return (
-                    <div
-                      key={sel.repositoryId}
-                      className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2"
-                    >
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-mono font-semibold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
-                          <GitBranch className="w-3.5 h-3.5" />
-                          {displayName}
-                        </span>
-                        {(
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setSelectedRepos((prev) =>
-                                prev.filter((r) => r.repositoryId !== sel.repositoryId)
-                              )
-                            }
-                            className="text-[11px] text-slate-400 hover:text-red-500 transition-colors"
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-[11px] text-slate-500 mb-0.5">
-                            Base Branch
-                          </label>
-                          <input
-                            type="text"
-                            value={sel.baseBranch}
-                            onChange={(e) =>
-                              handleUpdateRepoField(sel.repositoryId, 'baseBranch', e.target.value)
-                            }
-                            className="w-full px-2.5 py-1.5 text-xs font-mono rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
-                            placeholder="development2"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] text-slate-500 mb-0.5">
-                            Working Branch
-                          </label>
-                          <input
-                            type="text"
-                            value={sel.workingBranch}
-                            onChange={(e) =>
-                              handleUpdateRepoField(
-                                sel.repositoryId,
-                                'workingBranch',
-                                e.target.value
-                              )
-                            }
-                            className="w-full px-2.5 py-1.5 text-xs font-mono rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
-                            placeholder="RAY-MIHIR-Security-Graphs"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
