@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import fs from 'node:fs';
 import type { KubernetesLogSettings } from '../src/types/scripts';
 import type { KubernetesInventory, PodInventoryRow } from '../src/types/kubernetesInventory';
+import { inventoryArgs } from '../src/lib/inventoryCommands';
 import { validateKubernetes } from './kubernetesScript';
 
 const execute = promisify(execFile);
@@ -15,8 +16,7 @@ const errorText = (error: any) => text(error?.code === 'ENOENT' ? 'kubectl was n
 export type InventoryQuery = (resource: 'pods' | 'services' | 'endpointslices', settings: KubernetesLogSettings, signal?: AbortSignal) => Promise<unknown>;
 
 export const queryInventory: InventoryQuery = async (resource, settings, signal) => {
-  const { stdout } = await execute('kubectl', ['--kubeconfig', settings.kubeconfig, '--namespace', settings.namespace,
-    '--request-timeout=8s', 'get', resource, '-o', 'json'], { timeout: 9500, maxBuffer: 8 * 1024 * 1024, signal,
+  const { stdout } = await execute('kubectl', inventoryArgs(resource, settings), { timeout: 9500, maxBuffer: 8 * 1024 * 1024, signal,
       env: Object.fromEntries(['PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'LANG', 'LC_ALL'].flatMap(key => process.env[key] ? [[key, process.env[key]!]] : [])),
     });
   return JSON.parse(stdout);

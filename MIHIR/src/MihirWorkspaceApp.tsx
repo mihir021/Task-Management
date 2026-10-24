@@ -46,6 +46,7 @@ import { ProjectsReposView } from './components/ProjectsReposView';
 import { WorkLogView } from './components/WorkLogView';
 import { MonitorView } from './components/MonitorView';
 import { ScriptsView } from './components/ScriptsView';
+import { SpiderMark } from './components/SpiderMark';
 import { PortsMonitoringView } from './components/PortsMonitoringView';
 import { SettingsView } from './components/SettingsView';
 import { NewTaskModal } from './components/NewTaskModal';
@@ -69,6 +70,7 @@ import {
 type MainSection = 'dashboard' | 'tasks' | 'projects' | 'worklog' | 'monitor' | 'ports' | 'scripts' | 'copilot' | 'settings';
 
 export const MihirWorkspaceApp: React.FC = () => {
+  const [spiderTheme, setSpiderTheme] = useState(() => localStorage.getItem('mihir_appearance') !== 'classic');
   const [workspace, setWorkspace] = useState<WorkspaceStatePayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorBanner, setErrorBanner] = useState<string>('');
@@ -696,7 +698,7 @@ export const MihirWorkspaceApp: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen flex bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+    <div data-appearance={spiderTheme ? 'spider' : 'classic'} className="workspace-shell min-h-screen flex bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       {/* Collapsible Desktop Left Sidebar */}
       <aside
         aria-label="Primary Workspace Navigation"
@@ -714,7 +716,7 @@ export const MihirWorkspaceApp: React.FC = () => {
               }}
               className="text-sm font-bold tracking-tight text-slate-900 dark:text-slate-100 whitespace-nowrap truncate"
             >
-              MIHIR Workspace
+              <span className="brand-lockup"><SpiderMark className="brand-spider" /><span>MIHIR Workspace<small>ENGINEERING JOURNAL</small></span></span>
             </button>
           )}
           <button
@@ -731,6 +733,8 @@ export const MihirWorkspaceApp: React.FC = () => {
           </button>
         </div>
 
+        {!sidebarCollapsed && <div className="sidebar-project"><span className="project-icon">R</span><div><small>PROJECT</small><strong>Ray workspace</strong></div><span className="connection-dot online" /></div>}
+        <button type="button" className="appearance-switch" aria-label={spiderTheme ? 'Switch to classic appearance' : 'Switch to Spider-Man appearance'} onClick={() => { const next = !spiderTheme; setSpiderTheme(next); localStorage.setItem('mihir_appearance', next ? 'spider' : 'classic'); }}>{sidebarCollapsed ? '◈' : spiderTheme ? '◈ Spider-Man edition' : '◈ Classic edition'}</button>
         <nav className="flex-1 p-3 space-y-1">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
@@ -850,7 +854,9 @@ export const MihirWorkspaceApp: React.FC = () => {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <nav className="flex-1 p-3 space-y-1">
+            {!sidebarCollapsed && <div className="sidebar-project"><span className="project-icon">R</span><div><small>PROJECT</small><strong>Ray workspace</strong></div><span className="connection-dot online" /></div>}
+        <button type="button" className="appearance-switch" aria-label={spiderTheme ? 'Switch to classic appearance' : 'Switch to Spider-Man appearance'} onClick={() => { const next = !spiderTheme; setSpiderTheme(next); localStorage.setItem('mihir_appearance', next ? 'spider' : 'classic'); }}>{sidebarCollapsed ? '◈' : spiderTheme ? '◈ Spider-Man edition' : '◈ Classic edition'}</button>
+        <nav className="flex-1 p-3 space-y-1">
               {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
                 const isCurrent = !selectedTaskId && activeSection === item.id;
@@ -884,7 +890,7 @@ export const MihirWorkspaceApp: React.FC = () => {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Bar Following Clean 3-Zone Contract */}
-        <header className="h-14 px-4 sm:px-6 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between gap-4 sticky top-0 z-30">
+        <header className="workspace-topbar h-14 px-4 sm:px-6 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between gap-4 sticky top-0 z-30">
           {/* Zone 1: Mobile Menu + Context Breadcrumb */}
           <div className="flex items-center gap-3 shrink-0">
             <button
@@ -1026,7 +1032,7 @@ export const MihirWorkspaceApp: React.FC = () => {
         )}
 
         {/* Main Viewport Content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+        <main key={selectedTaskId || activeSection} className="workspace-main flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
           {activeTask ? (
             <TaskDetailView
               task={activeTask}

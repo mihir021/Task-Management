@@ -1,3 +1,4 @@
+import { SpiderMark } from './SpiderMark';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Plus,
@@ -89,7 +90,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [selectedRepo, setSelectedRepo] = useState<string>('All');
   const [focusItems, setFocusItems] = useState<DailyFocusEntry[]>([]);
   const [newFocusText, setNewFocusText] = useState('');
-  const [newFocusTaskCode, setNewFocusTaskCode] = useState('MIHIR-002');
+  const [newFocusTaskCode, setNewFocusTaskCode] = useState('RAY');
   const [copiedStandupToast, setCopiedStandupToast] = useState(false);
 
   useEffect(() => {
@@ -199,10 +200,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const hasDemoTasks = useMemo(() => tasks.some((t) => t.isDemo), [tasks]);
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-6">
       {/* Top Workspace Header & Quick Actions */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-200 dark:border-slate-800">
-        <div>
+      <div className="dashboard-heading flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+        <div className="relative z-10">
+          <p className="eyebrow muted mb-3">{new Date().toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', timeZone: timezone }).toUpperCase()} · {timezone.toUpperCase()}</p>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
             Developer Workspace Overview
           </h1>
@@ -267,6 +269,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
+      <div className="web-hero dashboard-web-banner"><div className="relative z-10"><p className="eyebrow">YOUR FRIENDLY NEIGHBORHOOD WORKSPACE</p><h2>A little more focus.<br /><span>A lot more possibility.</span></h2><p className="hero-description">Build, track, and ship. One thread at a time.</p></div><SpiderMark className="hero-spider" /></div>
       {/* Daily Engineering Focus Checklist Card */}
       <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -418,7 +421,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* 8 Real Stored Metric Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+      <div className="dashboard-metrics grid grid-cols-2 xl:grid-cols-4 gap-4">
         <button
           type="button"
           onClick={() => onNavigateToTasksWithFilter({ status: 'All' })}
@@ -500,6 +503,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Empty State if no tasks exist */}
       {filteredTasks.length === 0 ? (
         <div className="p-12 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center space-y-4">
+          <div className="empty-task-illustration"><FileText size={40} strokeWidth={1.3} /><Plus size={16} /></div>
           <div className="max-w-md mx-auto space-y-2">
             <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
               No active tasks in this view

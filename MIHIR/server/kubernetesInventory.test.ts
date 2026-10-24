@@ -7,6 +7,7 @@ import express from 'express';
 import { kubernetesPreset } from './kubernetesScript';
 import { parseInventory, inspectKubernetes, queryInventory } from './kubernetesInventory';
 import { resolveRunnerHome, repairRootKubeconfig } from './runnerHome';
+import { inventoryArgs, inventoryCommandPreview } from '../src/lib/inventoryCommands';
 import { PORT_MAPPINGS, mappedInventory, matchesPortService } from '../src/lib/portMappings';
 import { createScriptsRouter } from './scriptsRouter';
 
@@ -90,4 +91,36 @@ test('application mappings include internal gateway variants without matching un
   assert.equal(mappedInventory(inventory).pods.length, 3);
   assert.deepEqual(mappedInventory(inventory, 'ray-gateway-service').pods.map(pod => pod.name), ['ray-gateway-service-internal-d']);
   assert.deepEqual(mappedInventory(inventory, 'ray-controller-service').pods, []);
+});
+
+test('command preview uses the exact kubectl arguments and contains only selected service prefixes', () => {
+  const settings = { kubeconfig: "/tmp/config with ' quote; safe", namespace: 'default' };
+  assert.deepEqual(inventoryArgs('pods', settings), ['--kubeconfig', settings.kubeconfig, '--namespace', 'default', '--request-timeout=8s', 'get', 'pods', '-o', 'json']);
+  const preview = inventoryCommandPreview(settings, ['ray-job-service']);
+  assert.ok(preview.includes("'\\''"), 'Single quotes are escaped for terminal copy');
+  assert.equal((preview.match(/kubectl /g) || []).length, 3);
+  assert.ok(preview.includes('ray-job-service')); assert.ok(!preview.includes('ray-hub-service'));
+  assert.equal(inventoryCommandPreview(settings, []), '');
+});
+test('root-owned script definitions do not block authenticated connection or default read-only workflows', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mihir-permission-'));
+  const scripts = path.join(dir, 'scripts'); fs.mkdirSync(scripts); const file = path.join(scripts, 'definitions.json');
+  fs.writeFileSync(file, 'preserved-original');
+  const read = fs.readFileSync.bind(fs);
+  t.mock.method(fs, 'readFileSync', ((target: any, ...args: any[]) => {
+    if (target === file) throw Object.assign(new Error('EACCES: permission denied, open definitions.json'), { code: 'EACCES' });
+    return (read as any)(target, ...args);
+  }) as any);
+  const app = express(); const token = 'd'.repeat(64);
+  app.use('/api/scripts', createScriptsRouter({ dataDir: dir, home: dir, companion: { token, origin: 'https://task-management-azure-iota.vercel.app' } }));
+  const server = app.listen(0, '127.0.0.1'); await new Promise<void>(resolve => server.once('listening', resolve));
+  t.after(async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); t.mock.restoreAll(); fs.rmSync(dir, { recursive: true, force: true }); });
+  const base = `http://127.0.0.1:${(server.address() as any).port}/api/scripts`;
+  assert.equal((await fetch(base + '/connection')).status, 403);
+  const options = { headers: { 'X-Mihir-Scripts-Token': token } };
+  const connection = await (await fetch(base + '/connection', options)).json();
+  assert.equal(connection.token, token); assert.equal(connection.home, dir);
+  const response = await fetch(base, options); assert.equal(response.status, 200);
+  assert.ok((await response.json()).scripts.some((item: any) => item.kubernetes));
+  assert.equal(read(file, 'utf8'), 'preserved-original');
 });

@@ -44,5 +44,23 @@ Ports Monitoring groups Ray app → ray-controller-service, Job app → ray-job-
 Gateway → ray-gateway-service, and Hub app → ray-hub-service. Cards show live
 NodePort → service port → target port mappings and ready pod counts. Select a card
 to filter the tables, or choose Show all apps. Internal and headless variants stay
-visible with their full service names. One namespace snapshot feeds all four apps
-every 30 seconds. Scripts retains log workflows; port inspection has moved out.
+visible with their full service names. Selected apps are inspected sequentially on each 30-second refresh cycle. Scripts retains log workflows; port inspection has moved out.
+
+## Select applications before running
+
+Ports Monitoring starts idle. Select any combination of Ray app, Job app, Gateway
+and Hub app, review **Commands to run**, then choose **Start monitoring**. Each
+selected app has a separate service-port and pod table. Changes to the selection
+remain pending until **Apply selection & refresh**; pause/resume, manual refresh
+and stop are available. The runner executes only the selected app inspections,
+sequentially; each uses three namespace JSON reads with a local service-prefix
+filter. The command preview is generated from the same argument builder as kubectl.
+
+Port pairing now uses `/api/scripts/connection`, independently of saved scripts.
+For older runners, the hosted frontend also recognizes the root-owned definitions
+permission error and connects directly for inventory without modifying that file.
+New runners return default scripts if definitions are unreadable and preserve the
+original file. Authentication and loopback restrictions remain in place.
+
+The default Spider-Man appearance has a separate Classic switch and supports the
+existing light/dark preference. Motion respects prefers-reduced-motion.

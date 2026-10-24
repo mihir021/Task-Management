@@ -20,7 +20,13 @@ export function createScriptsRouter({ dataDir, home = resolveRunnerHome(), compa
     if (!fs.existsSync(definitions)) {
       fs.writeFileSync(definitions, JSON.stringify([defaultScript(home), ...kubernetesServicePresets(home)], null, 2), { mode: 0o600 });
     }
-    const original: ScriptDefinition[] = JSON.parse(fs.readFileSync(definitions, 'utf8'));
+    let original: ScriptDefinition[];
+    try { original = JSON.parse(fs.readFileSync(definitions, 'utf8')); }
+    catch (problem: any) {
+      // Older sudo runners can leave a root-owned file. Keep it intact; read-only monitoring must still work.
+      if (problem.code === 'EACCES') return [defaultScript(home), ...kubernetesServicePresets(home)];
+      throw problem;
+    }
     const saved = original.map(script => repairRootKubeconfig(script, home));
     const additions = kubernetesServicePresets(home).filter(preset => !saved.some(item => item.id === preset.id));
     if (additions.length) saved.push(...additions);
@@ -71,6 +77,7 @@ export function createScriptsRouter({ dataDir, home = resolveRunnerHome(), compa
     try { res.json({ scripts: readDefinitions(), runs: runner.list(), token, containers: RAY_CONTAINERS, home, capabilities: ['kubernetes-inventory-v1'], terminalAvailable: fs.existsSync('/usr/bin/script') }); }
     catch (value) { error(res, value, 500); }
   });
+  router.get('/connection', (_req, res) => res.json({ token, home, capabilities: ['kubernetes-inventory-v1'] }));
   // Shared in-flight requests prevent overlapping 30-second polls or multiple tabs from spawning duplicate queries.
   const inventories = new Map<string, ReturnType<typeof inspectKubernetes>>();
   router.post('/kubernetes/inspect', async (req, res) => {
