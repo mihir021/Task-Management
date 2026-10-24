@@ -151,3 +151,4 @@
   .workspace-topbar > div:nth-child(3) { grid-column:2; grid-row:1; }
   .workspace-main { min-width:0; }
 }
+.table-caption { display:block; width:auto; }
