@@ -1,8 +1,7 @@
+import { WorkspaceExperienceControls } from '../../../src/workspace/WorkspaceExperience';
 import { DatabaseStatus } from './DatabaseStatus';
 import React, { useRef, useState } from 'react';
 import {
-  Sun,
-  Moon,
   Download,
   Upload,
   Database,
@@ -111,34 +110,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           <div className="space-y-2">
             <span className="block text-xs font-medium text-slate-700 dark:text-slate-300">
-              Color Theme (Saved Preference)
+              Appearance & motion (saved on this device)
             </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => onUpdateSettings({ theme: 'light' })}
-                className={`flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-lg border transition-colors ${
-                  settings.theme === 'light'
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'bg-slate-50 dark:bg-slate-950 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
-                }`}
-              >
-                <Sun className="w-4 h-4" />
-                Light Theme
-              </button>
-              <button
-                type="button"
-                onClick={() => onUpdateSettings({ theme: 'dark' })}
-                className={`flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-lg border transition-colors ${
-                  settings.theme === 'dark'
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'bg-slate-50 dark:bg-slate-950 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
-                }`}
-              >
-                <Moon className="w-4 h-4" />
-                Dark Theme
-              </button>
-            </div>
+            <WorkspaceExperienceControls />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

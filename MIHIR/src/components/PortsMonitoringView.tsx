@@ -1,6 +1,6 @@
+import { SpiderMask } from '../../../src/workspace/SpiderArtwork';
 import React, { useEffect, useRef, useState } from 'react';
 import { Network, Play, Pause, RefreshCw, Check, Copy, Terminal, ShieldCheck, Square, ChevronDown } from 'lucide-react';
-import { SpiderMark } from './SpiderMark';
 import { isLocalWorkspace, LOCAL_RUNNER_URL, RUNNER_TOKEN_KEY, scriptRequest } from '../lib/scriptTransport';
 import { PORT_MAPPINGS, mappedInventory } from '../lib/portMappings';
 import { inventoryCommandPreview } from '../lib/inventoryCommands';
@@ -91,7 +91,7 @@ export function PortsMonitoringView() {
   return <div className="ports-page space-y-6">
     <header className="web-hero ports-hero">
       <div className="relative z-10"><p className="eyebrow">THE NETWORK DESK / RAY OPERATIONS</p><h1>Every port.<br /><span>One clear picture.</span></h1><p className="hero-description">Pick your apps. Follow the connections. Keep your services in sight.</p><div className="hero-pills"><span><ShieldCheck size={13} />Read-only Kubernetes</span><span><RefreshCw size={13} />30-second refresh</span></div></div>
-      <SpiderMark className="hero-spider" />
+      <SpiderMask className="operations-network-art" />
     </header>
     <section className="surface runner-bar" aria-label="Ports runner connection">
       <div className="flex items-center gap-3"><span className={`connection-dot ${connected ? 'online' : ''}`} /><div><h2 className="font-semibold text-sm">{connected ? 'Local runner connected' : 'Connect your local runner'}</h2><p className="text-xs text-slate-500 mt-1">Your kubeconfig and terminal stay on this computer.</p></div></div>

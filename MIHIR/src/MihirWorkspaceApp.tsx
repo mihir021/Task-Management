@@ -1,8 +1,12 @@
+import { SpiderMask } from '../../src/workspace/SpiderArtwork';
 import { useFan } from "../../src/fan/store";
 import { WorkspaceExperienceControls } from "../../src/workspace/WorkspaceExperience";
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
   LayoutDashboard,
+  Layers3,
+  LockKeyhole,
+  ChevronRight,
   CheckSquare,
   FolderGit2,
   Clock,
@@ -40,6 +44,7 @@ import {
 } from './types/workspace';
 import { getNextTaskCodeFromList } from './lib/taskCodeHelper';
 import { summarizeTaskChecklistProgress } from './lib/workspaceLogic';
+import { WorkspaceLockContext } from './components/WorkspaceGate';
 import { DatabaseStatus } from './components/DatabaseStatus';
 import { DashboardView } from './components/DashboardView';
 import { TaskListView } from './components/TaskListView';
@@ -48,7 +53,6 @@ import { ProjectsReposView } from './components/ProjectsReposView';
 import { WorkLogView } from './components/WorkLogView';
 import { MonitorView } from './components/MonitorView';
 import { ScriptsView } from './components/ScriptsView';
-import { SpiderMark } from './components/SpiderMark';
 import { PortsMonitoringView } from './components/PortsMonitoringView';
 import { SettingsView } from './components/SettingsView';
 import { NewTaskModal } from './components/NewTaskModal';
@@ -72,6 +76,7 @@ import {
 type MainSection = 'dashboard' | 'tasks' | 'projects' | 'worklog' | 'monitor' | 'ports' | 'scripts' | 'copilot' | 'settings';
 
 export const MihirWorkspaceApp: React.FC = () => {
+  const lockWorkspace = useContext(WorkspaceLockContext);
   const [workspace, setWorkspace] = useState<WorkspaceStatePayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorBanner, setErrorBanner] = useState<string>('');
@@ -635,9 +640,9 @@ export const MihirWorkspaceApp: React.FC = () => {
 
   if (loading && !workspace) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-400">
+      <div className="workspace-loading min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-400" role="status">
         <div className="space-y-3 text-center">
-          <div className="text-sm font-mono">Loading MIHIR Workspace...</div>
+          <div className="workspace-loader" aria-hidden="true"><Layers3 size={26} /></div><div className="text-sm font-medium">Getting your workspace ready…</div>
         </div>
       </div>
     );
@@ -697,7 +702,7 @@ export const MihirWorkspaceApp: React.FC = () => {
   ];
 
   return (
-    <div data-appearance="spider" className="workspace-shell min-h-screen flex bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+    <div data-appearance="studio" className="workspace-shell min-h-screen flex bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       {/* Collapsible Desktop Left Sidebar */}
       <aside
         aria-label="Primary Workspace Navigation"
@@ -715,7 +720,7 @@ export const MihirWorkspaceApp: React.FC = () => {
               }}
               className="text-sm font-bold tracking-tight text-slate-900 dark:text-slate-100 whitespace-nowrap truncate"
             >
-              <span className="brand-lockup"><SpiderMark className="brand-spider" /><span>MIHIR Workspace<small>YOUR DAILY ISSUE</small></span></span>
+              <span className="brand-lockup"><span className="brand-symbol"><SpiderMask /></span><span>MIHIR<small>YOUR FRIENDLY WORKSPACE</small></span></span>
             </button>
           )}
           <button
@@ -733,14 +738,16 @@ export const MihirWorkspaceApp: React.FC = () => {
         </div>
 
         {!sidebarCollapsed && <div className="sidebar-project"><span className="project-icon">R</span><div><small>PROJECT</small><strong>Ray workspace</strong></div><span className="connection-dot online" /></div>}
-        <div className="thread-sidebar-edition">{sidebarCollapsed ? "TC" : "THREAD CITY / WORKSPACE EDITION"}</div>
+        <div className="thread-sidebar-edition">{sidebarCollapsed ? "—" : "MISSION CONTROL"}</div>
         <nav className="flex-1 p-3 space-y-1">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
-            const isCurrent = !selectedTaskId && activeSection === item.id;
+            const isCurrent = selectedTaskId ? item.id === 'tasks' : activeSection === item.id;
             return (
               <button
                 key={item.id}
+                aria-current={isCurrent ? 'page' : undefined}
+                data-section={item.id}
                 type="button"
                 onClick={() => {
                   setSelectedTaskId(null);
@@ -818,14 +825,15 @@ export const MihirWorkspaceApp: React.FC = () => {
               <span>Project: Ray</span>
               <span>{workspace.tasks.length} tasks</span>
             </div>
-            <p className="thread-sidebar-note">ONE THREAD. ALL YOUR WORK.</p>
+            <p className="thread-sidebar-note">WITH GREAT CODE COMES GREAT RESPONSIBILITY.</p>
           </div>
         )}
+        {lockWorkspace && <button type="button" onClick={lockWorkspace} className="sidebar-lock" aria-label="Lock workspace" title="Lock workspace"><LockKeyhole size={14} />{!sidebarCollapsed && <span>Lock workspace</span>}</button>}
       </aside>
 
       {/* Mobile Navigation Drawer */}
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 md:hidden flex">
+        <div className="workspace-mobile-nav fixed inset-0 z-50 md:hidden flex">
           <div
             className="fixed inset-0 bg-slate-950/60"
             onClick={() => setMobileMenuOpen(false)}
@@ -843,14 +851,16 @@ export const MihirWorkspaceApp: React.FC = () => {
               </button>
             </div>
             {!sidebarCollapsed && <div className="sidebar-project"><span className="project-icon">R</span><div><small>PROJECT</small><strong>Ray workspace</strong></div><span className="connection-dot online" /></div>}
-        <div className="thread-sidebar-edition">{sidebarCollapsed ? "TC" : "THREAD CITY / WORKSPACE EDITION"}</div>
+        <div className="thread-sidebar-edition">{sidebarCollapsed ? "—" : "MISSION CONTROL"}</div>
         <nav className="flex-1 p-3 space-y-1">
               {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
-                const isCurrent = !selectedTaskId && activeSection === item.id;
+                const isCurrent = selectedTaskId ? item.id === 'tasks' : activeSection === item.id;
                 return (
                   <button
                     key={item.id}
+                    aria-current={isCurrent ? 'page' : undefined}
+                    data-section={item.id}
                     type="button"
                     onClick={() => {
                       setSelectedTaskId(null);
@@ -913,7 +923,7 @@ export const MihirWorkspaceApp: React.FC = () => {
           </div>
 
           {/* Zone 2: Global Search Bar + Command Palette Trigger */}
-          <div className="flex-1 max-w-md">
+          <div className="workspace-search flex-1 max-w-md">
             <div className="relative flex items-center">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
@@ -928,7 +938,7 @@ export const MihirWorkspaceApp: React.FC = () => {
                     setActiveSection('tasks');
                   }
                 }}
-                placeholder="Search tasks, MIHIR-001, branches, or files..."
+                placeholder="Search your workspace…"
                 className="w-full pl-8 pr-16 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
               <button
@@ -944,6 +954,7 @@ export const MihirWorkspaceApp: React.FC = () => {
 
           {/* Zone 3: Active Timer Indicator, Cloud Auth, & Primary New Task CTA */}
           <div className="flex items-center gap-2 shrink-0">
+            {lockWorkspace && <button type="button" onClick={lockWorkspace} aria-label="Lock workspace" title="Lock workspace" className="md:hidden p-2 rounded-lg text-slate-500"><LockKeyhole size={15} /></button>}
             {activeTimer && (
               <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800 text-xs font-mono">
                 <button
@@ -976,7 +987,7 @@ export const MihirWorkspaceApp: React.FC = () => {
                 setSelectedTaskId(null);
                 setActiveSection('copilot');
               }}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800/70 hover:bg-indigo-100 rounded-lg transition-colors whitespace-nowrap"
+              className="workspace-copilot-shortcut hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800/70 hover:bg-indigo-100 rounded-lg transition-colors whitespace-nowrap"
             >
               <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
               AI Copilot
@@ -993,7 +1004,7 @@ export const MihirWorkspaceApp: React.FC = () => {
           </div>
         </header>
 
-        <div className="thread-edition-bar"><span>MIHIR / ENGINEERING JOURNAL</span><WorkspaceExperienceControls /></div>
+        <div className="thread-edition-bar"><span><span className="edition-dot" /> THE DAILY THREAD <ChevronRight size={12} /> <span className="edition-context">Spider-Man edition</span></span><WorkspaceExperienceControls /></div>
 
         {/* Feedback / Error Banners */}
         {errorBanner && (

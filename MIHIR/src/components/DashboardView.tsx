@@ -1,5 +1,4 @@
-import { WorkspaceComicHero } from "../../../src/workspace/WorkspaceExperience";
-import { SpiderMark } from './SpiderMark';
+import { WorkspaceFocusHero } from "../../../src/workspace/WorkspaceExperience";
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Plus,
@@ -207,10 +206,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="relative z-10">
           <p className="eyebrow muted mb-3">{new Date().toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', timeZone: timezone }).toUpperCase()} · {timezone.toUpperCase()}</p>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-            Your daily issue.
+            Back on duty, Mihir.
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            Personal engineering journal, multi-repository branch tracker, and verification log for the Ray project.
+            Your city of code. Here’s today’s briefing.
           </p>
         </div>
 
@@ -270,14 +269,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      <WorkspaceComicHero onCreateTask={onOpenNewTask} />
+      <WorkspaceFocusHero onCreateTask={onOpenNewTask} activeCount={filteredTasks.filter(task => task.status !== 'Done').length} completedCount={filteredTasks.filter(task => task.status === 'Done').length} repositoryCount={repositories.length} />
       {/* Daily Engineering Focus Checklist Card */}
-      <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+      <div className="daily-focus-card p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-indigo-500" />
             <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-200">
-              Today&apos;s Daily Engineering Focus ({focusItems.filter((i) => i.completed).length}/{focusItems.length} Done)
+              Today&apos;s focus ({focusItems.filter((i) => i.completed).length}/{focusItems.length} Done)
             </h2>
           </div>
           <form onSubmit={handleAddFocusItem} className="flex items-center gap-2">
@@ -314,6 +313,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          {focusItems.length === 0 && <p className="focus-empty md:col-span-3">A clear day starts with one priority. Add your first focus item above.</p>}
           {focusItems.map((item) => (
             <div
               key={item.id}

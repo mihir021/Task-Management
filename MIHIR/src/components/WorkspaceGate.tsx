@@ -1,6 +1,9 @@
+import { CornerWeb, SpiderMask } from '../../../src/workspace/SpiderArtwork';
 import { RUNNER_TOKEN_KEY } from '../lib/scriptTransport';
-import React, { useEffect, useState } from 'react';
-import { ArrowRight, LockKeyhole, ShieldCheck, Terminal } from 'lucide-react';
+import React, { createContext, useEffect, useState } from 'react';
+import { ArrowRight, LockKeyhole, ShieldCheck, Layers3 } from 'lucide-react';
+
+export const WorkspaceLockContext = createContext<(() => Promise<void>) | null>(null);
 
 export function WorkspaceGate({ children }: { children: React.ReactNode }) {
   const [unlocked, setUnlocked] = useState(false);
@@ -41,12 +44,12 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
       setUnlocked(false); setPassword(''); setError('');
     } catch (problem: any) { window.alert(problem.message); }
   }
-  if (unlocked) return <><div className="fixed bottom-3 right-3 z-50"><button onClick={lock} className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 shadow-lg hover:bg-slate-100"><LockKeyhole size={14} />Lock workspace</button></div>{children}</>;
+  if (unlocked) return <WorkspaceLockContext.Provider value={lock}>{children}</WorkspaceLockContext.Provider>;
   return <main className="thread-login min-h-screen bg-slate-950 text-white grid lg:grid-cols-2">
-    <section className="hidden lg:flex flex-col justify-between p-14 bg-gradient-to-br from-indigo-600 via-indigo-800 to-slate-950">
-      <div className="font-semibold flex items-center gap-3"><Terminal size={24} />MIHIR Workspace</div>
-      <div><span className="text-xs uppercase tracking-[0.24em] text-indigo-200">Your daily command center</span><h1 className="text-5xl font-semibold leading-tight mt-5 max-w-lg">A little focus.<br />A lot of forward.</h1><p className="text-indigo-200 mt-6 max-w-md leading-relaxed">Track your work, inspect Ray services, and keep your terminal workflows close at hand.</p></div>
-      <p className="text-sm text-indigo-200 flex gap-2 items-center"><ShieldCheck size={17} />Private workspace · Password protected</p>
+    <section className="hidden lg:flex flex-col justify-between p-14 bg-gradient-to-br from-indigo-600 via-indigo-800 to-slate-950"><CornerWeb className="login-corner-web" /><div className="login-hanging-mask" aria-hidden="true"><SpiderMask /></div>
+      <div className="font-semibold flex items-center gap-3"><span className="login-brand-icon"><SpiderMask /></span>MIHIR Workspace</div>
+      <div><span className="text-xs uppercase tracking-[0.24em] text-indigo-200">THE DAILY THREAD / PRIVATE EDITION</span><h1 className="text-5xl font-semibold leading-tight mt-5 max-w-lg">Behind every<br />great hero,<br /><em>a great plan.</em></h1><p className="text-indigo-200 mt-6 max-w-md leading-relaxed">Your friendly neighborhood engineering desk. Track the mission, untangle the code, and make your next move.</p></div>
+      <div className="login-workflow" aria-hidden="true"><span>01 <b>Plan</b></span><i /><span>02 <b>Build</b></span><i /><span>03 <b>Ship</b></span></div><p className="text-sm text-indigo-200 flex gap-2 items-center"><ShieldCheck size={17} />Private workspace · Password protected</p>
     </section>
     <section className="flex items-center justify-center px-6 py-12"><div className="w-full max-w-sm">
       <div className="bg-indigo-500/10 border border-indigo-400/20 rounded-2xl w-14 h-14 grid place-items-center mb-8"><LockKeyhole className="text-indigo-300" /></div>

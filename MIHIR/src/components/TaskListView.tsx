@@ -522,7 +522,7 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
   };
 
   return (
-    <div className="space-y-5">
+    <div className="task-list-page space-y-5">
       {/* Header & View Mode Switcher */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
@@ -530,7 +530,7 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
             My Tasks
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
-            Search by title, ID, branch, repository, or changed file path. Task status is tracked independently of Git progress.
+            Every task, from first idea to final delivery.
           </p>
         </div>
 

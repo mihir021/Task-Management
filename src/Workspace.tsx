@@ -4,7 +4,7 @@ import { MihirWorkspaceApp } from "../MIHIR/src/MihirWorkspaceApp";
 import { WorkspaceExperience } from "./workspace/WorkspaceExperience";
 export default function Workspace() {
   useEffect(() => {
-    document.title = "MIHIR Workspace — Tasks and Ports Monitoring";
+    document.title = "MIHIR Workspace — The Daily Thread";
   }, []);
   return (
     <WorkspaceExperience><WorkspaceGate>
